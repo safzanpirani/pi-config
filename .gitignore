@@ -1,0 +1,23 @@
+# Secrets - DO NOT COMMIT TO PUBLIC REPO
+auth.json
+antigravity-accounts.json
+
+# Sessions (local state)
+sessions/
+
+# Binary tools (platform-specific)
+bin/
+
+# Cached git packages
+git/
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.log
+*.tmp

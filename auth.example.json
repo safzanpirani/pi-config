@@ -1,0 +1,27 @@
+{
+  "google-antigravity": {
+    "type": "oauth",
+    "refresh": "1//0g... (populated by /login)",
+    "access": "ya29... (populated by /login)",
+    "expires": 1234567890000,
+    "projectId": "your-project-id",
+    "email": "your-email@gmail.com"
+  },
+  "github-copilot": {
+    "type": "oauth",
+    "refresh": "ghu_... (populated by /login)",
+    "access": "...",
+    "expires": 1234567890000
+  },
+  "openai-codex": {
+    "type": "oauth",
+    "refresh": "rt_... (populated by /login)",
+    "access": "eyJ...",
+    "expires": 1234567890000,
+    "accountId": "..."
+  },
+  "openrouter": {
+    "type": "api_key",
+    "key": "sk-or-... (get from openrouter.ai)"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "accounts": [
+    {
+      "email": "your-email@gmail.com",
+      "refreshToken": "1//0g... (get this from /login google-antigravity)",
+      "projectId": "your-project-id",
+      "addedAt": 1234567890000
+    }
+  ],
+  "activeIndex": 0,
+  "rotationMode": "round-robin"
+}

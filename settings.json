@@ -1,0 +1,81 @@
+{
+  "shellPath": "C:\\msys64\\usr\\bin\\zsh.exe",
+  "lastChangelogVersion": "0.50.9",
+  "defaultProvider": "google-antigravity",
+  "defaultModel": "claude-opus-4-5-thinking",
+  "defaultThinkingLevel": "high",
+  "hideThinkingBlock": false,
+  "packages": [
+    {
+      "source": "git:github.com/aliou/pi-extensions",
+      "extensions": [
+        "extensions/defaults/index.ts",
+        "extensions/guardrails/index.ts",
+        "extensions/meta/index.ts",
+        "extensions/planning/index.ts",
+        "extensions/presenter/index.ts",
+        "extensions/providers/index.ts",
+        "extensions/session-management/index.ts",
+        "extensions/the-dumb-zone/index.ts"
+      ]
+    },
+    {
+      "source": "git:github.com/tmustier/pi-extensions",
+      "extensions": [
+        "pi-extensions/agent-guidance/agent-guidance.ts",
+        "pi-extensions/code-actions/index.ts",
+        "pi-extensions/raw-paste/index.ts",
+        "pi-extensions/tab-status/tab-status.ts",
+        "pi-extensions/usage-extension/index.ts"
+      ]
+    },
+    {
+      "source": "git:github.com/prateekmedia/pi-hooks",
+      "extensions": [
+        "./checkpoint/checkpoint.ts",
+        "./lsp/lsp.ts",
+        "./lsp/lsp-tool.ts",
+        "./permission/permission.ts",
+        "./repeat/repeat.ts"
+      ]
+    },
+    "npm:pi-web-access",
+    {
+      "source": "npm:shitty-extensions",
+      "extensions": [
+        "./extensions/cost-tracker.ts",
+        "./extensions/funny-working-message.ts",
+        "./extensions/handoff.ts",
+        "./extensions/memory-mode.ts",
+        "./extensions/plan-mode.ts",
+        "./extensions/status-widget.ts",
+        "./extensions/usage-bar.ts"
+      ]
+    },
+    {
+      "source": "git:github.com/kcosr/pi-extensions",
+      "extensions": [
+        "apply-patch-tool/index.ts",
+        "assistant/index.ts",
+        "codemap/index.ts",
+        "skill-picker/index.ts",
+        "toolwatch/extension/index.ts"
+      ]
+    }
+  ],
+  "enabledModels": [
+    "github-copilot/claude-opus-4.5",
+    "github-copilot/claude-sonnet-4.5",
+    "github-copilot/gpt-5.2",
+    "github-copilot/gpt-5.2-codex",
+    "openai-codex/gpt-5.2",
+    "openai-codex/gpt-5.2-codex",
+    "google-antigravity/claude-opus-4-5-thinking",
+    "google-antigravity/claude-sonnet-4-5",
+    "google-antigravity/claude-sonnet-4-5-thinking",
+    "google-antigravity/gemini-3-flash",
+    "google-antigravity/gemini-3-pro-high",
+    "google-antigravity/gemini-3-pro-low",
+    "openrouter-moonshot/moonshotai/kimi-k2.5"
+  ]
+}
