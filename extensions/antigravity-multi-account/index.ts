@@ -710,4 +710,179 @@ export default function(pi: ExtensionAPI) {
       ctx.ui.notify("✓ Cleared all rate limit timers", "success");
     },
   });
+  
+  // OAuth login for new account
+  pi.registerCommand("ag-login", {
+    description: "Add a new Antigravity account via OAuth login",
+    handler: async (args, ctx) => {
+      try {
+        // Generate OAuth URL
+        const redirectUri = "http://localhost:8096/oauth/callback";
+        const scope = encodeURIComponent("openid email https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/generative-language.tuning https://www.googleapis.com/auth/generative-language.retriever");
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+        
+        ctx.ui.notify(
+          `Opening OAuth flow...\n\n` +
+          `If browser doesn't open, visit:\n${authUrl}\n\n` +
+          `Waiting for callback...`,
+          "info"
+        );
+        
+        // Start local callback server
+        const http = await import("node:http");
+        const { URLSearchParams } = await import("node:url");
+        
+        const server = http.createServer(async (req, res) => {
+          const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
+          
+          if (url.pathname === "/oauth/callback") {
+            const code = url.searchParams.get("code");
+            const error = url.searchParams.get("error");
+            
+            if (error) {
+              res.writeHead(400, { "Content-Type": "text/html" });
+              res.end(`<html><body><h1>OAuth Error</h1><p>${error}</p><p>You can close this window.</p></body></html>`);
+              server.close();
+              ctx.ui.notify(`OAuth error: ${error}`, "error");
+              return;
+            }
+            
+            if (!code) {
+              res.writeHead(400, { "Content-Type": "text/html" });
+              res.end(`<html><body><h1>Missing authorization code</h1><p>You can close this window.</p></body></html>`);
+              server.close();
+              ctx.ui.notify("OAuth failed: no authorization code", "error");
+              return;
+            }
+            
+            // Exchange code for tokens
+            try {
+              const tokenResponse = await fetch(TOKEN_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                  client_id: CLIENT_ID,
+                  client_secret: CLIENT_SECRET,
+                  code,
+                  redirect_uri: redirectUri,
+                  grant_type: "authorization_code",
+                }),
+              });
+              
+              if (!tokenResponse.ok) {
+                const errorText = await tokenResponse.text();
+                throw new Error(`Token exchange failed: ${errorText}`);
+              }
+              
+              const tokens = await tokenResponse.json() as {
+                access_token: string;
+                refresh_token: string;
+                expires_in: number;
+              };
+              
+              // Get user email and project ID
+              const userinfoResponse = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
+                headers: { Authorization: `Bearer ${tokens.access_token}` },
+              });
+              
+              if (!userinfoResponse.ok) {
+                throw new Error("Failed to get user info");
+              }
+              
+              const userInfo = await userinfoResponse.json() as { email: string };
+              
+              // Get project ID (try to get default billing project)
+              let projectId = "unknown";
+              try {
+                const projectsResponse = await fetch(
+                  "https://cloudresourcemanager.googleapis.com/v1/projects?filter=lifecycleState:ACTIVE",
+                  { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+                );
+                if (projectsResponse.ok) {
+                  const projects = await projectsResponse.json() as { projects?: Array<{ projectId: string }> };
+                  if (projects.projects && projects.projects.length > 0) {
+                    projectId = projects.projects[0].projectId;
+                  }
+                }
+              } catch {
+                // Ignore, will use "unknown"
+              }
+              
+              // Check if account already exists
+              config = loadConfig();
+              const existing = config.accounts.find(a => a.refreshToken === tokens.refresh_token || a.email === userInfo.email);
+              if (existing) {
+                res.writeHead(200, { "Content-Type": "text/html" });
+                res.end(`<html><body><h1>Account Already Exists</h1><p>${userInfo.email}</p><p>You can close this window.</p></body></html>`);
+                server.close();
+                ctx.ui.notify(`Account already exists: ${userInfo.email}`, "warning");
+                return;
+              }
+              
+              // Add new account
+              const newAccount: AntigravityAccount = {
+                email: userInfo.email,
+                refreshToken: tokens.refresh_token,
+                projectId,
+                accessToken: tokens.access_token,
+                accessTokenExpires: Date.now() + (tokens.expires_in * 1000) - (5 * 60 * 1000),
+                addedAt: Date.now(),
+                requestCount: 0,
+              };
+              
+              config.accounts.push(newAccount);
+              saveConfig(config);
+              
+              res.writeHead(200, { "Content-Type": "text/html" });
+              res.end(`<html><body><h1>Success!</h1><p>Added account: ${userInfo.email}</p><p>Total accounts: ${config.accounts.length}</p><p>You can close this window.</p></body></html>`);
+              server.close();
+              
+              ctx.ui.notify(
+                `✓ Added account: ${userInfo.email}\n` +
+                `  Project: ${projectId}\n` +
+                `  Total accounts: ${config.accounts.length}`,
+                "success"
+              );
+              ctx.ui.setStatus("ag-multi", `AG: ${config.accounts.length}acct`);
+              
+            } catch (e) {
+              res.writeHead(500, { "Content-Type": "text/html" });
+              res.end(`<html><body><h1>Error</h1><p>${e}</p><p>You can close this window.</p></body></html>`);
+              server.close();
+              ctx.ui.notify(`OAuth failed: ${e}`, "error");
+            }
+          } else {
+            res.writeHead(404);
+            res.end("Not Found");
+          }
+        });
+        
+        server.listen(8096, () => {
+          // Open browser
+          const open = async () => {
+            try {
+              const { exec } = await import("node:child_process");
+              const platform = process.platform;
+              const cmd = platform === "win32" ? "start" : platform === "darwin" ? "open" : "xdg-open";
+              exec(`${cmd} "${authUrl}"`);
+            } catch {
+              // Browser open failed, URL already shown to user
+            }
+          };
+          open();
+        });
+        
+        // Timeout after 5 minutes
+        setTimeout(() => {
+          if (server.listening) {
+            server.close();
+            ctx.ui.notify("OAuth timeout (5 minutes)", "warning");
+          }
+        }, 5 * 60 * 1000);
+        
+      } catch (e) {
+        ctx.ui.notify(`Failed to start OAuth: ${e}`, "error");
+      }
+    },
+  });
 }

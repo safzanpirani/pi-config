@@ -1,0 +1,32 @@
+{
+  "safzan-proxy": {
+    "type": "openai-compatible",
+    "label": "Safzan LLM Proxy",
+    "baseURL": "https://llm.safzan.dev/v1",
+    "apiKey": "safzan",
+    "models": {
+      "kiro-claude-sonnet-4-5-agentic": {
+        "id": "kiro-claude-sonnet-4-5-agentic",
+        "label": "Kiro Claude Sonnet 4.5 Agentic",
+        "info": {
+          "maxInputTokens": 200000,
+          "maxOutputTokens": 64000,
+          "supportsImages": true,
+          "supportsPDF": false,
+          "supportsPromptCache": true
+        }
+      },
+      "kiro-claude-opus-4-5-agentic": {
+        "id": "kiro-claude-opus-4-5-agentic",
+        "label": "Kiro Claude Opus 4.5 Agentic",
+        "info": {
+          "maxInputTokens": 200000,
+          "maxOutputTokens": 64000,
+          "supportsImages": true,
+          "supportsPDF": false,
+          "supportsPromptCache": true
+        }
+      }
+    }
+  }
+}

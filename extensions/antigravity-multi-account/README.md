@@ -22,6 +22,7 @@ Round-robin multi-account support for pi's `google-antigravity` provider.
 | Command | Description |
 |---------|-------------|
 | `/ag-accounts` | List all accounts with status, request counts, rate limits |
+| `/ag-login` | Add a new account via OAuth (opens browser) |
 | `/ag-import` | Import account from pi's auth (after `/login google-antigravity`) |
 | `/ag-remove <email\|index>` | Remove an account |
 | `/ag-mode <rr\|ue>` | Switch rotation mode |
@@ -39,6 +40,13 @@ Stays on one account until it hits a rate limit, then switches. Best for maximiz
 
 ## Adding New Accounts
 
+### Method 1: OAuth Login (Recommended)
+1. Run `/ag-login` in pi
+2. Browser opens with Google OAuth consent screen
+3. Grant permissions and complete the flow
+4. Account is automatically added to your pool
+
+### Method 2: Import from Pi's Auth
 1. Run `/login google-antigravity` in pi
 2. Complete the OAuth flow in your browser
 3. Run `/ag-import` to add the account to the pool
