@@ -716,8 +716,47 @@ export default function(pi: ExtensionAPI) {
     description: "Add a new Antigravity account via OAuth login",
     handler: async (args, ctx) => {
       try {
-        // Generate OAuth URL (use same scopes as pi's built-in antigravity)
-        const redirectUri = "http://localhost:8096/oauth/callback";
+        // Start local callback server
+        const http = await import("node:http");
+        const { URLSearchParams } = await import("node:url");
+        
+        // Find available port (try 9096-9105, avoiding 8096 which is often used by Jellyfin)
+        let port = 9096;
+        let server: any = null;
+        
+        const tryPort = (p: number): Promise<any> => {
+          return new Promise((resolve, reject) => {
+            const s = http.createServer();
+            s.once('error', (err: any) => {
+              if (err.code === 'EADDRINUSE') {
+                reject(err);
+              } else {
+                reject(err);
+              }
+            });
+            s.once('listening', () => {
+              s.close();
+              resolve(p);
+            });
+            s.listen(p);
+          });
+        };
+        
+        // Find available port
+        for (let p = 9096; p <= 9105; p++) {
+          try {
+            await tryPort(p);
+            port = p;
+            break;
+          } catch (e) {
+            if (p === 9105) {
+              throw new Error("No available ports (9096-9105 all in use)");
+            }
+          }
+        }
+        
+        // Generate OAuth URL with dynamic port
+        const redirectUri = `http://localhost:${port}/oauth/callback`;
         const scopes = [
           "openid",
           "https://www.googleapis.com/auth/cloud-platform",
@@ -730,15 +769,11 @@ export default function(pi: ExtensionAPI) {
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scopeParam}&access_type=offline&prompt=consent`;
         
         ctx.ui.notify(
-          `Opening OAuth flow...\n\n` +
+          `Opening OAuth flow on port ${port}...\n\n` +
           `If browser doesn't open, visit:\n${authUrl}\n\n` +
           `Waiting for callback...`,
           "info"
         );
-        
-        // Start local callback server
-        const http = await import("node:http");
-        const { URLSearchParams } = await import("node:url");
         
         const server = http.createServer(async (req, res) => {
           const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -865,7 +900,15 @@ export default function(pi: ExtensionAPI) {
           }
         });
         
-        server.listen(8096, () => {
+        // Create server with proper error handling
+        let timeoutHandle: NodeJS.Timeout | null = null;
+        
+        server.on('error', (err: any) => {
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          ctx.ui.notify(`Server error: ${err.message}`, "error");
+        });
+        
+        server.listen(port, () => {
           // Open browser
           const open = async () => {
             try {
@@ -881,7 +924,7 @@ export default function(pi: ExtensionAPI) {
         });
         
         // Timeout after 5 minutes
-        setTimeout(() => {
+        timeoutHandle = setTimeout(() => {
           if (server.listening) {
             server.close();
             ctx.ui.notify("OAuth timeout (5 minutes)", "warning");
