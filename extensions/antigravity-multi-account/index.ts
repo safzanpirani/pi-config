@@ -722,7 +722,6 @@ export default function(pi: ExtensionAPI) {
         
         // Find available port (try 9096-9105, avoiding 8096 which is often used by Jellyfin)
         let port = 9096;
-        let server: any = null;
         
         const tryPort = (p: number): Promise<any> => {
           return new Promise((resolve, reject) => {
