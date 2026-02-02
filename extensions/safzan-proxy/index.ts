@@ -40,9 +40,51 @@ export default function(pi: ExtensionAPI) {
         },
         contextWindow: 200000,
         maxTokens: 64000
+      },
+      {
+        id: "gemini-claude-opus-4-5-thinking",
+        name: "Gemini Claude Opus 4.5 Thinking",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: {
+          input: 5.0,
+          output: 25.0,
+          cacheRead: 0.5,
+          cacheWrite: 6.25
+        },
+        contextWindow: 200000,
+        maxTokens: 64000
+      },
+      {
+        id: "gemini-claude-sonnet-4-5-thinking",
+        name: "Gemini Claude Sonnet 4.5 Thinking",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: {
+          input: 3.0,
+          output: 15.0,
+          cacheRead: 0.3,
+          cacheWrite: 3.75
+        },
+        contextWindow: 200000,
+        maxTokens: 64000
+      },
+      {
+        id: "gemini-claude-sonnet-4-5",
+        name: "Gemini Claude Sonnet 4.5",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: {
+          input: 3.0,
+          output: 15.0,
+          cacheRead: 0.3,
+          cacheWrite: 3.75
+        },
+        contextWindow: 200000,
+        maxTokens: 64000
       }
     ]
   });
   
-  console.log("[safzan-proxy] Registered 2 models: kiro-claude-sonnet-4-5-agentic, kiro-claude-opus-4-5-agentic");
+  console.log("[safzan-proxy] Registered 5 models: kiro-claude-sonnet-4-5-agentic, kiro-claude-opus-4-5-agentic, gemini-claude-opus-4-5-thinking, gemini-claude-sonnet-4-5-thinking, gemini-claude-sonnet-4-5");
 }
