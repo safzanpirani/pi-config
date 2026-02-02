@@ -716,10 +716,18 @@ export default function(pi: ExtensionAPI) {
     description: "Add a new Antigravity account via OAuth login",
     handler: async (args, ctx) => {
       try {
-        // Generate OAuth URL
+        // Generate OAuth URL (use same scopes as pi's built-in antigravity)
         const redirectUri = "http://localhost:8096/oauth/callback";
-        const scope = encodeURIComponent("openid email https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/generative-language.tuning https://www.googleapis.com/auth/generative-language.retriever");
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+        const scopes = [
+          "openid",
+          "https://www.googleapis.com/auth/cloud-platform",
+          "https://www.googleapis.com/auth/userinfo.email",
+          "https://www.googleapis.com/auth/userinfo.profile",
+          "https://www.googleapis.com/auth/cclog",
+          "https://www.googleapis.com/auth/experimentsandconfigs",
+        ];
+        const scopeParam = encodeURIComponent(scopes.join(" "));
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scopeParam}&access_type=offline&prompt=consent`;
         
         ctx.ui.notify(
           `Opening OAuth flow...\n\n` +
