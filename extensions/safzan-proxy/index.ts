@@ -17,12 +17,20 @@ export default function(pi: ExtensionAPI) {
     maxTokensField: "max_tokens" as const,
   };
 
-  // Set cost to 0 since this is a free proxy - avoids negative cost display issues
-  const zeroCost = {
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0
+  // Sonnet 4.5 pricing ($/million tokens)
+  const sonnetCost = {
+    input: 3.0,
+    output: 15.0,
+    cacheRead: 0.3,
+    cacheWrite: 3.75
+  };
+
+  // Opus 4.5 pricing ($/million tokens)
+  const opusCost = {
+    input: 15.0,
+    output: 75.0,
+    cacheRead: 1.5,
+    cacheWrite: 18.75
   };
 
   pi.registerProvider("safzan-proxy", {
@@ -35,7 +43,7 @@ export default function(pi: ExtensionAPI) {
         name: "Kiro Claude Sonnet 4.5 Agentic",
         reasoning: false,
         input: ["text", "image"],
-        cost: zeroCost,
+        cost: sonnetCost,
         contextWindow: 200000,
         maxTokens: 64000,
         compat: proxyCompat
@@ -45,7 +53,7 @@ export default function(pi: ExtensionAPI) {
         name: "Kiro Claude Opus 4.5 Agentic",
         reasoning: false,
         input: ["text", "image"],
-        cost: zeroCost,
+        cost: opusCost,
         contextWindow: 200000,
         maxTokens: 64000,
         compat: proxyCompat
@@ -55,7 +63,7 @@ export default function(pi: ExtensionAPI) {
         name: "Gemini Claude Opus 4.5 Thinking",
         reasoning: true,
         input: ["text", "image"],
-        cost: zeroCost,
+        cost: opusCost,
         contextWindow: 200000,
         maxTokens: 64000,
         compat: proxyCompat
@@ -65,7 +73,7 @@ export default function(pi: ExtensionAPI) {
         name: "Gemini Claude Sonnet 4.5 Thinking",
         reasoning: true,
         input: ["text", "image"],
-        cost: zeroCost,
+        cost: sonnetCost,
         contextWindow: 200000,
         maxTokens: 64000,
         compat: proxyCompat
@@ -75,7 +83,7 @@ export default function(pi: ExtensionAPI) {
         name: "Gemini Claude Sonnet 4.5",
         reasoning: false,
         input: ["text", "image"],
-        cost: zeroCost,
+        cost: sonnetCost,
         contextWindow: 200000,
         maxTokens: 64000,
         compat: proxyCompat
@@ -83,5 +91,5 @@ export default function(pi: ExtensionAPI) {
     ]
   });
   
-  console.log("[safzan-proxy] Registered 5 models with zero cost tracking");
+  console.log("[safzan-proxy] Registered 5 models with Anthropic pricing");
 }
