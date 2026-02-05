@@ -27,10 +27,10 @@ export default function(pi: ExtensionAPI) {
 
   // Opus 4.5 pricing ($/million tokens)
   const opusCost = {
-    input: 15.0,
-    output: 75.0,
-    cacheRead: 1.5,
-    cacheWrite: 18.75
+    input: 5.0,
+    output: 25.0,
+    cacheRead: 0.5,
+    cacheWrite: 6.25
   };
 
   pi.registerProvider("safzan-proxy", {
