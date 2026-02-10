@@ -17,7 +17,7 @@ export default function(pi: ExtensionAPI) {
     maxTokensField: "max_tokens" as const,
   };
 
-  // Sonnet 4.5 pricing ($/million tokens)
+  // Sonnet pricing ($/million tokens)
   const sonnetCost = {
     input: 3.0,
     output: 15.0,
@@ -25,7 +25,7 @@ export default function(pi: ExtensionAPI) {
     cacheWrite: 3.75
   };
 
-  // Opus 4.5 pricing ($/million tokens)
+  // Opus pricing ($/million tokens)
   const opusCost = {
     input: 5.0,
     output: 25.0,
@@ -59,9 +59,33 @@ export default function(pi: ExtensionAPI) {
         compat: proxyCompat
       },
       {
+        id: "kiro-claude-opus-4-6-agentic",
+        name: "Kiro Claude Opus 4.6 Agentic",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: opusCost,
+        contextWindow: 200000,
+        maxTokens: 64000,
+        compat: proxyCompat
+      },
+      {
         id: "gemini-claude-opus-4-5-thinking",
         name: "Gemini Claude Opus 4.5 Thinking",
-        reasoning: true,
+        // reasoning: false to work around CLIProxyAPI token counting bug
+        // CLIProxyAPI adds thoughtsTokenCount to prompt_tokens AND reports it
+        // as reasoning_tokens, causing pi-agent to double-subtract → negative input
+        reasoning: false,
+        input: ["text", "image"],
+        cost: opusCost,
+        contextWindow: 200000,
+        maxTokens: 64000,
+        compat: proxyCompat
+      },
+      {
+        id: "gemini-claude-opus-4-6-thinking",
+        name: "Gemini Claude Opus 4.6 Thinking",
+        // reasoning: false — same CLIProxyAPI workaround
+        reasoning: false,
         input: ["text", "image"],
         cost: opusCost,
         contextWindow: 200000,
@@ -71,7 +95,8 @@ export default function(pi: ExtensionAPI) {
       {
         id: "gemini-claude-sonnet-4-5-thinking",
         name: "Gemini Claude Sonnet 4.5 Thinking",
-        reasoning: true,
+        // reasoning: false — same CLIProxyAPI workaround
+        reasoning: false,
         input: ["text", "image"],
         cost: sonnetCost,
         contextWindow: 200000,
@@ -91,5 +116,5 @@ export default function(pi: ExtensionAPI) {
     ]
   });
   
-  console.log("[safzan-proxy] Registered 5 models with Anthropic pricing");
+  console.log("[safzan-proxy] Registered 7 models with Anthropic pricing");
 }
