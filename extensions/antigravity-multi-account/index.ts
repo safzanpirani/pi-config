@@ -2,8 +2,8 @@
  * Antigravity Multi-Account Round-Robin Extension
  * 
  * Provides multi-account support for the google-antigravity provider with:
- * - Round-robin rotation (per-request) OR use-until-exhausted mode
- * - Auto-switch on rate limits (429)
+ * - Round-robin rotation (per-request), use-until-exhausted, OR manual mode
+ * - Auto-switch on rate limits (429) for non-manual modes
  * - Multiple account management via /ag-login, /ag-accounts, /ag-remove
  * - Persistent storage in ~/.pi/agent/antigravity-accounts.json
  * 
@@ -11,7 +11,8 @@
  *   /ag-accounts  - List all accounts and their status
  *   /ag-import    - Import account from pi's current google-antigravity auth
  *   /ag-remove    - Remove an account by email or index
- *   /ag-mode      - Switch rotation mode (round-robin | use-until-exhausted)
+ *   /ag-mode      - Switch mode (round-robin | use-until-exhausted | manual)
+ *   /ag-use       - Switch to a specific account by email or index
  *   /ag-next      - Force switch to next account
  *   /ag-status    - Show current account and request stats
  */
@@ -42,7 +43,7 @@ interface AccountsConfig {
   version: number;
   accounts: AntigravityAccount[];
   activeIndex: number;
-  rotationMode: "round-robin" | "use-until-exhausted";
+  rotationMode: "round-robin" | "use-until-exhausted" | "manual";
 }
 
 interface MultiAccountCredentials {
@@ -81,6 +82,12 @@ let lastError: string | undefined;
 // Account Management
 // ============================================================================
 
+function normalizeRotationMode(mode: unknown): AccountsConfig["rotationMode"] {
+  if (mode === "manual") return "manual";
+  if (mode === "use-until-exhausted") return "use-until-exhausted";
+  return "round-robin";
+}
+
 function loadConfig(): AccountsConfig {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
@@ -89,7 +96,7 @@ function loadConfig(): AccountsConfig {
         version: data.version ?? 1,
         accounts: data.accounts ?? [],
         activeIndex: data.activeIndex ?? 0,
-        rotationMode: data.rotationMode ?? "round-robin",
+        rotationMode: normalizeRotationMode(data.rotationMode),
       };
     }
   } catch (e) {
@@ -193,10 +200,15 @@ function getAvailableAccounts(): AntigravityAccount[] {
 
 function getNextAccountIndex(forceSwitch = false): number {
   if (config.accounts.length === 0) return -1;
-  
+
+  // Manual mode never auto-switches unless explicitly forced by command.
+  if (config.rotationMode === "manual" && !forceSwitch) {
+    return config.activeIndex;
+  }
+
   const now = Date.now();
   const available = getAvailableAccounts();
-  
+
   if (available.length === 0) {
     // All accounts are rate-limited, find the one that resets soonest
     let soonestIdx = 0;
@@ -210,7 +222,7 @@ function getNextAccountIndex(forceSwitch = false): number {
     }
     return soonestIdx;
   }
-  
+
   if (config.rotationMode === "round-robin" || forceSwitch) {
     // Find next available account after current
     let nextIdx = (config.activeIndex + 1) % config.accounts.length;
@@ -222,13 +234,13 @@ function getNextAccountIndex(forceSwitch = false): number {
       nextIdx = (nextIdx + 1) % config.accounts.length;
     }
   }
-  
-  // use-until-exhausted mode: stay on current if available
+
+  // use-until-exhausted: stay on current if available
   const current = config.accounts[config.activeIndex];
   if (current && (!current.rateLimitResetTime || current.rateLimitResetTime <= now)) {
     return config.activeIndex;
   }
-  
+
   // Current is rate-limited, find any available
   for (let i = 0; i < config.accounts.length; i++) {
     const account = config.accounts[i];
@@ -236,7 +248,7 @@ function getNextAccountIndex(forceSwitch = false): number {
       return i;
     }
   }
-  
+
   return config.activeIndex;
 }
 
@@ -293,32 +305,33 @@ export default function(pi: ExtensionAPI) {
           };
         },
         
-        // Refresh: get fresh tokens for the NEXT account (round-robin happens here)
+        // Refresh: choose account based on mode, then issue access token
         async refreshToken(credentials: any) {
-          // Determine which account to use
-          const nextIdx = getNextAccountIndex();
-          if (nextIdx < 0) {
+          if (config.accounts.length === 0) {
             throw new Error("No Antigravity accounts configured. Use /ag-import to add accounts.");
           }
-          
-          // Update active index if rotating
-          if (config.rotationMode === "round-robin" && nextIdx !== config.activeIndex) {
-            config.activeIndex = nextIdx;
-            saveConfig(config);
+
+          // Round-robin rotates at refresh time. Other modes keep current index.
+          if (config.rotationMode === "round-robin") {
+            const nextIdx = getNextAccountIndex();
+            if (nextIdx >= 0 && nextIdx !== config.activeIndex) {
+              config.activeIndex = nextIdx;
+              saveConfig(config);
+            }
           }
-          
+
           const account = config.accounts[config.activeIndex];
           if (!account) {
             throw new Error("No active account found");
           }
-          
+
           try {
             const accessToken = await getValidAccessToken(account);
             account.lastUsed = Date.now();
             account.requestCount = (account.requestCount ?? 0) + 1;
             totalRequests++;
             saveConfig(config);
-            
+
             return {
               refresh: account.refreshToken,
               access: accessToken,
@@ -331,16 +344,24 @@ export default function(pi: ExtensionAPI) {
               },
             };
           } catch (e) {
-            // Mark account as having an error and try next
             account.lastError = String(e);
             saveConfig(config);
-            
-            // Try to switch to another account
+
+            // In manual mode, never auto-fallback to another account.
+            if (config.rotationMode === "manual") {
+              throw e;
+            }
+
+            const prevIdx = config.activeIndex;
             const fallbackIdx = switchToNextAccount();
-            if (fallbackIdx !== config.activeIndex) {
+            if (fallbackIdx !== prevIdx) {
               const fallback = config.accounts[fallbackIdx];
               if (fallback) {
                 const accessToken = await getValidAccessToken(fallback);
+                fallback.lastUsed = Date.now();
+                fallback.requestCount = (fallback.requestCount ?? 0) + 1;
+                totalRequests++;
+                saveConfig(config);
                 return {
                   refresh: fallback.refreshToken,
                   access: accessToken,
@@ -358,7 +379,7 @@ export default function(pi: ExtensionAPI) {
           }
         },
         
-        // getApiKey: called for each request - this is where round-robin should happen
+        // getApiKey: called for each request
         getApiKey(credentials: any) {
           // The credentials contain the account info from refreshToken
           // Return the JSON format expected by google-gemini-cli
@@ -445,21 +466,25 @@ export default function(pi: ExtensionAPI) {
         // Mark current account as rate limited
         const currentIdx = config.activeIndex;
         markAccountRateLimited(currentIdx, resetMs);
-        
+
         const current = config.accounts[currentIdx];
         ctx.ui.notify(
           `Account ${current?.email ?? currentIdx} rate limited for ${Math.ceil(resetMs / 1000)}s`,
           "warning"
         );
-        
-        // Switch to next available account
-        const nextIdx = switchToNextAccount();
-        if (nextIdx !== currentIdx) {
-          const next = config.accounts[nextIdx];
-          ctx.ui.notify(`Switched to: ${next?.email ?? "account " + (nextIdx + 1)}`, "info");
-          ctx.ui.setStatus("ag-multi", `AG: ${next?.email?.split("@")[0] ?? "?"}`);
+
+        if (config.rotationMode === "manual") {
+          ctx.ui.notify("Manual mode: staying on current account. Use /ag-use or /ag-next to switch.", "info");
         } else {
-          ctx.ui.notify("No other accounts available, will retry with same account", "warning");
+          // Switch to next available account
+          const nextIdx = switchToNextAccount();
+          if (nextIdx !== currentIdx) {
+            const next = config.accounts[nextIdx];
+            ctx.ui.notify(`Switched to: ${next?.email ?? "account " + (nextIdx + 1)}`, "info");
+            ctx.ui.setStatus("ag-multi", `AG: ${next?.email?.split("@")[0] ?? "?"}`);
+          } else {
+            ctx.ui.notify("No other accounts available, will retry with same account", "warning");
+          }
         }
       }
       
@@ -609,10 +634,10 @@ export default function(pi: ExtensionAPI) {
   
   // Switch rotation mode
   pi.registerCommand("ag-mode", {
-    description: "Set rotation mode: round-robin (rr) or use-until-exhausted (ue)",
+    description: "Set mode: round-robin (rr), use-until-exhausted (ue), or manual (m)",
     handler: async (args, ctx) => {
       const mode = args?.trim().toLowerCase();
-      
+
       if (mode === "round-robin" || mode === "rr" || mode === "r") {
         config.rotationMode = "round-robin";
         saveConfig(config);
@@ -620,19 +645,76 @@ export default function(pi: ExtensionAPI) {
       } else if (mode === "use-until-exhausted" || mode === "exhaust" || mode === "ue" || mode === "e") {
         config.rotationMode = "use-until-exhausted";
         saveConfig(config);
-        ctx.ui.notify("✓ Mode: use-until-exhausted\n  Switches only on rate limit", "success");
+        ctx.ui.notify("✓ Mode: use-until-exhausted\n  Auto-switches only on rate limit", "success");
+      } else if (mode === "manual" || mode === "man" || mode === "m") {
+        config.rotationMode = "manual";
+        saveConfig(config);
+        ctx.ui.notify("✓ Mode: manual\n  Never auto-switches. Use /ag-use or /ag-next.", "success");
       } else {
         ctx.ui.notify(
           `Current mode: ${config.rotationMode}\n\n` +
           `Usage: /ag-mode <mode>\n` +
-          `  rr, round-robin     - Rotate each request\n` +
-          `  ue, use-until-exhausted - Switch only on rate limit`,
+          `  rr, round-robin         - Rotate each request\n` +
+          `  ue, use-until-exhausted - Auto-switch on rate limit only\n` +
+          `  m, manual               - Never auto-switch`,
           "info"
         );
       }
     },
   });
   
+  // Switch to a specific account
+  pi.registerCommand("ag-use", {
+    description: "Switch active account (usage: /ag-use <email or index>)",
+    handler: async (args, ctx) => {
+      config = loadConfig();
+
+      if (config.accounts.length === 0) {
+        ctx.ui.notify("No accounts configured", "error");
+        return;
+      }
+
+      const arg = args?.trim();
+      if (!arg) {
+        ctx.ui.notify("Usage: /ag-use <email or index>", "error");
+        return;
+      }
+
+      let index = -1;
+      const num = parseInt(arg, 10);
+      if (!isNaN(num) && num >= 1 && num <= config.accounts.length) {
+        index = num - 1;
+      } else {
+        index = config.accounts.findIndex(a =>
+          a.email.toLowerCase().includes(arg.toLowerCase())
+        );
+      }
+
+      if (index === -1) {
+        ctx.ui.notify(`Account not found: ${arg}`, "error");
+        return;
+      }
+
+      config.activeIndex = index;
+      saveConfig(config);
+
+      const selected = config.accounts[index];
+      const now = Date.now();
+      const rateLimited = !!selected?.rateLimitResetTime && selected.rateLimitResetTime > now;
+      const remaining = rateLimited ? Math.ceil((selected.rateLimitResetTime! - now) / 1000) : 0;
+
+      ctx.ui.setStatus("ag-multi", `AG: ${selected?.email?.split("@")[0] ?? "?"}`);
+      if (rateLimited) {
+        ctx.ui.notify(
+          `✓ Switched to: ${selected?.email ?? "account " + (index + 1)}\n⚠ This account is currently rate-limited for ~${remaining}s`,
+          "warning"
+        );
+      } else {
+        ctx.ui.notify(`✓ Switched to: ${selected?.email ?? "account " + (index + 1)}`, "success");
+      }
+    },
+  });
+
   // Force switch to next account
   pi.registerCommand("ag-next", {
     description: "Force switch to the next available account",

@@ -142,8 +142,9 @@ To use multiple Google accounts for load balancing:
 # Check accounts
 /ag-accounts
 
-# Set rotation mode
-/ag-mode rr   # round-robin (recommended)
+# Set mode
+/ag-mode m    # manual (best cache locality)
+# or: /ag-mode rr  # round-robin
 ```
 
 ### Configuration Files Reference
@@ -243,11 +244,12 @@ It stores multiple saved OpenAI Codex OAuth profiles so you can switch instantly
 
 ### Extension: antigravity-multi-account
 
-Provides round-robin multi-account support for the `google-antigravity` provider.
+Provides multi-account support for the `google-antigravity` provider.
 
 **Features:**
-- Distributes requests across multiple accounts evenly
-- Auto-switches on rate limit (429) errors
+- Three modes: round-robin, use-until-exhausted, manual
+- Auto-switches on rate limit (429) in non-manual modes
+- Manual pinning via `/ag-use` for cache-friendly workflows
 - Tracks rate limit reset times per account
 - Request counting per account
 
@@ -258,6 +260,8 @@ Provides round-robin multi-account support for the `google-antigravity` provider
 | `/ag-accounts` | List all accounts with status |
 | `/ag-mode rr` | Round-robin mode (rotate each request) |
 | `/ag-mode ue` | Use-until-exhausted mode (switch only on rate limit) |
+| `/ag-mode m` | Manual mode (never auto-switch) |
+| `/ag-use <email\|index>` | Switch to a specific account manually |
 | `/ag-next` | Force switch to next account |
 | `/ag-status` | Show current account and stats |
 | `/ag-import` | Import new account after `/login google-antigravity` |
@@ -266,11 +270,12 @@ Provides round-robin multi-account support for the `google-antigravity` provider
 
 **How it works:**
 1. Overrides `google-antigravity` OAuth provider with multi-account logic
-2. On each turn (in round-robin mode), rotates to next available account
-3. Refreshes access tokens automatically when expired
-4. Detects rate limit errors in `turn_end` and marks accounts as unavailable
-5. Skips rate-limited accounts until their reset time passes
-6. Updates status bar to show current account: `AG: username (#request)`
+2. In round-robin mode, rotates to next available account each turn
+3. In use-until-exhausted mode, stays on one account until rate-limited
+4. In manual mode, never auto-switches; you switch via `/ag-use` or `/ag-next`
+5. Refreshes access tokens automatically when expired
+6. Detects rate limit errors in `turn_end` and tracks reset timers
+7. Updates status bar to show current account: `AG: username (#request)`
 
 ### Extension: codex-swap
 
