@@ -47,6 +47,19 @@ const AGENT_DIR = path.join(os.homedir(), ".pi", "agent");
 const AUTH_FILE = path.join(AGENT_DIR, "auth.json");
 const STORE_FILE = path.join(AGENT_DIR, "codexswap.json");
 const BACKUPS_DIR = path.join(os.homedir(), ".pi", "backups");
+const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+
+type CodexUsageWindow = {
+  label: string;
+  usedPercent: number;
+  resetAt?: number;
+};
+
+type CodexUsageSnapshot = {
+  plan?: string;
+  windows: CodexUsageWindow[];
+  error?: string;
+};
 
 function readJson<T>(file: string): T | null {
   try {
@@ -78,6 +91,123 @@ function updateOpenAICodexInAuth(oauth: OAuthCred): void {
   const auth = readJson<Record<string, unknown>>(AUTH_FILE) ?? {};
   auth["openai-codex"] = oauth;
   writeJson(AUTH_FILE, auth);
+}
+
+function applyOpenAICodexOAuth(ctx: any, oauth: OAuthCred): void {
+  const cred: OAuthCred = { type: "oauth", ...oauth };
+  const storage = ctx?.modelRegistry?.authStorage;
+  if (storage && typeof storage.set === "function") {
+    storage.set("openai-codex", cred);
+    return;
+  }
+  updateOpenAICodexInAuth(cred);
+}
+
+async function refreshAndGetActiveOAuth(ctx: any): Promise<OAuthCred | null> {
+  const storage = ctx?.modelRegistry?.authStorage;
+  if (storage) {
+    try {
+      if (typeof storage.getApiKey === "function") {
+        await storage.getApiKey("openai-codex");
+      }
+    } catch {
+      // Ignore refresh errors; we'll still attempt to read current credential.
+    }
+
+    try {
+      if (typeof storage.get === "function") {
+        const cred = storage.get("openai-codex") as OAuthCred | undefined;
+        if (cred?.type === "oauth") return cred;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return getOpenAICodexFromAuth();
+}
+
+function formatWindowLabel(seconds?: number): string {
+  if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return "window";
+  if (seconds >= 24 * 60 * 60) {
+    const d = Math.round(seconds / (24 * 60 * 60));
+    return `${d}d`;
+  }
+  const h = Math.round(seconds / (60 * 60));
+  return `${h}h`;
+}
+
+function formatRemaining(resetAt?: number): string {
+  if (!resetAt) return "";
+  const diffMs = resetAt * 1000 - Date.now();
+  if (diffMs <= 0) return " (resetting now)";
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 60) return ` (${mins}m left)`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return ` (${hrs}h${rem ? `${rem}m` : ""} left)`;
+}
+
+async function fetchCodexUsageSnapshot(oauth: OAuthCred): Promise<CodexUsageSnapshot> {
+  const token = oauth.access;
+  if (!token) return { windows: [], error: "missing access token" };
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    "User-Agent": "pi-codexswap",
+  };
+
+  const accountId = typeof oauth.accountId === "string" ? oauth.accountId : undefined;
+  if (accountId) {
+    headers["ChatGPT-Account-Id"] = accountId;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const res = await fetch(CODEX_USAGE_URL, { headers, signal: controller.signal });
+
+    if (!res.ok) {
+      const msg = res.status === 401 || res.status === 403 ? "token expired" : `http ${res.status}`;
+      return { windows: [], error: msg };
+    }
+
+    const json = (await res.json()) as {
+      plan_type?: string;
+      rate_limit?: {
+        primary_window?: { used_percent?: number; limit_window_seconds?: number; reset_at?: number } | null;
+        secondary_window?: { used_percent?: number; limit_window_seconds?: number; reset_at?: number } | null;
+      };
+    };
+
+    const raw = [json.rate_limit?.primary_window, json.rate_limit?.secondary_window].filter(Boolean) as Array<{
+      used_percent?: number;
+      limit_window_seconds?: number;
+      reset_at?: number;
+    }>;
+
+    const windows: CodexUsageWindow[] = raw.map((w) => ({
+      label: formatWindowLabel(w.limit_window_seconds),
+      usedPercent: Math.max(0, Math.min(100, Math.round(w.used_percent ?? 0))),
+      resetAt: w.reset_at,
+    }));
+
+    return { plan: json.plan_type, windows };
+  } catch {
+    return { windows: [], error: "network/timeout" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function usageSummary(snapshot: CodexUsageSnapshot): string {
+  if (snapshot.error) return `Usage refresh: ${snapshot.error}`;
+  if (!snapshot.windows.length) return "Usage refresh: no window data";
+  const plan = snapshot.plan ? `plan=${snapshot.plan} | ` : "";
+  const pieces = snapshot.windows.map((w) => `${w.label} ${w.usedPercent}%${formatRemaining(w.resetAt)}`);
+  return `Usage now: ${plan}${pieces.join(" | ")}`;
 }
 
 function decodeJwtPayload(token?: string): Record<string, unknown> | null {
@@ -329,11 +459,17 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
         const idx = Math.max(0, store.profiles.findIndex((p) => p.id === currentId));
         const target = store.profiles[(idx + 1) % store.profiles.length];
 
-        updateOpenAICodexInAuth(target.oauth);
+        applyOpenAICodexOAuth(ctx, target.oauth);
         store.activeProfileId = target.id;
         saveStore(store);
 
-        ctx.ui.notify(`Switched openai-codex → ${target.label} (${shortWho(target)}).\nRun /reload once if this session still uses old creds.`, "success");
+        const activeOauth = await refreshAndGetActiveOAuth(ctx);
+        const usage = activeOauth ? await fetchCodexUsageSnapshot(activeOauth) : { windows: [], error: "auth unavailable" };
+
+        ctx.ui.notify(
+          `Switched openai-codex → ${target.label} (${shortWho(target)}).\n${usageSummary(usage)}`,
+          "success"
+        );
         return;
       }
 
@@ -396,10 +532,13 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
           return;
         }
 
-        updateOpenAICodexInAuth(target.oauth);
+        applyOpenAICodexOAuth(ctx, target.oauth);
         store.activeProfileId = target.id;
         saveStore(store);
-        ctx.ui.notify(`Switched openai-codex → ${target.label} (${shortWho(target)}).\nRun /reload once if needed.`, "success");
+
+        const activeOauth = await refreshAndGetActiveOAuth(ctx);
+        const usage = activeOauth ? await fetchCodexUsageSnapshot(activeOauth) : { windows: [], error: "auth unavailable" };
+        ctx.ui.notify(`Switched openai-codex → ${target.label} (${shortWho(target)}).\n${usageSummary(usage)}`, "success");
         return;
       }
 
