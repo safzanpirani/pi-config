@@ -84,9 +84,11 @@ This section provides detailed instructions for AI coding agents to set up this 
 ├── settings.json                  # Pi settings, packages, enabled models
 ├── mcp.json                       # MCP server configurations
 ├── extensions/
-│   └── antigravity-multi-account/ # Round-robin multi-account extension
-│       ├── index.ts
-│       └── README.md
+│   ├── antigravity-multi-account/ # Round-robin multi-account extension
+│   │   ├── index.ts
+│   │   └── README.md
+│   └── codex-swap/                # Multi-account OpenAI Codex switcher
+│       └── index.ts
 ├── sessions/                      # Session files (auto-created)
 ├── bin/                           # Binary tools (auto-created)
 └── git/                           # Cached git packages (auto-created)
@@ -234,6 +236,11 @@ To use multiple Google accounts for load balancing:
 }
 ```
 
+#### `codexswap.json` (OPTIONAL - multi-account Codex)
+
+This file is created automatically the first time you run `/codexswap`.
+It stores multiple saved OpenAI Codex OAuth profiles so you can switch instantly.
+
 ### Extension: antigravity-multi-account
 
 Provides round-robin multi-account support for the `google-antigravity` provider.
@@ -264,6 +271,26 @@ Provides round-robin multi-account support for the `google-antigravity` provider
 4. Detects rate limit errors in `turn_end` and marks accounts as unavailable
 5. Skips rate-limited accounts until their reset time passes
 6. Updates status bar to show current account: `AG: username (#request)`
+
+### Extension: codex-swap
+
+Provides fast switching between multiple OpenAI Codex OAuth logins (work/personal/etc.).
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/codexswap` | Cycle to the next saved Codex account |
+| `/codexswap status` | Show saved profiles and active profile |
+| `/codexswap who` or `/codexwho` | Show currently active account |
+| `/codexswap add <label>` | Save current `/login openai-codex` account under a label |
+| `/codexswap use <label or index>` | Switch to a saved account |
+| `/codexswap rm <label or index>` | Remove a saved account |
+
+**Add a third account (or more):**
+1. `/login openai-codex` (sign in to the new account)
+2. `/codexswap add work-2`
+3. Repeat for as many accounts as you want
 
 ### Installed Packages
 
