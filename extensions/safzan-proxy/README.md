@@ -1,17 +1,25 @@
-# Safzan LLM Proxy Extension
+# Safzan Proxy / AgentRouter Claude Code Extension
 
-Registers custom models from llm.safzan.dev proxy.
+Registers direct AgentRouter-backed Claude models for pi using the native Anthropic Messages API.
 
-## Models
+## What it does
 
-- **kiro-claude-sonnet-4-5-agentic** - Kiro Claude Sonnet 4.5 Agentic (200K context)
-- **kiro-claude-opus-4-5-agentic** - Kiro Claude Opus 4.5 Agentic (200K context)
-- **gemini-claude-opus-4-5-thinking** - Gemini Claude Opus 4.5 Thinking (200K context, reasoning)
-- **gemini-claude-sonnet-4-5-thinking** - Gemini Claude Sonnet 4.5 Thinking (200K context, reasoning)
-- **gemini-claude-sonnet-4-5** - Gemini Claude Sonnet 4.5 (200K context)
+- Reads the AgentRouter API key from `~/.pi/agent/auth.json` (`agentrouter.key`) or `AGENTROUTER_API_KEY`
+- Sends requests directly to `https://agentrouter.org` (Anthropic SDK targets `/v1/messages`)
+- Impersonates Claude Code with the exact required headers
+- Uses pi's native `anthropic-messages` transport, so streaming usage and tool calling work correctly
+- Registers both `agentrouter/claude-opus-4-6` and `safzan-proxy/claude-opus-4-6`
 
-## Usage
+## Registered models
 
-Models will automatically appear in pi's model picker (Ctrl+P) after extension loads.
+- `agentrouter/claude-opus-4-6`
+- `safzan-proxy/claude-opus-4-6`
+- `llamacpp/qwen3.5-35b-a3b-ud-q4_k_xl`
 
-Endpoint: `https://llm.safzan.dev/v1`
+## Notes
+
+This replaces the older VibeProxy/OpenAI-compat route for Claude Opus 4.6. The model now talks to AgentRouter as a native Anthropic Messages endpoint, which fixes:
+
+- `usage: null` streaming chunks
+- missing tool calling support
+- broken Anthropic-specific streaming semantics

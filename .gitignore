@@ -1,18 +1,19 @@
-# Secrets - DO NOT COMMIT TO PUBLIC REPO
-auth.json
-antigravity-accounts.json
-
-# Sessions (local state)
+# Local state
 sessions/
-
-# Binary tools (platform-specific)
-bin/
-
-# Cached git packages
 git/
+bin/
 
 # Node modules
 node_modules/
+
+# Secrets and machine-local runtime files
+auth.json
+antigravity-accounts.json
+codexswap.json
+codex-fast.json
+mcp-tools-cache.json
+*.bak
+*.bak-*
 
 # OS files
 .DS_Store

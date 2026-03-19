@@ -1,8 +1,8 @@
 {
-  "shellPath": "C:\\msys64\\usr\\bin\\zsh.exe",
-  "lastChangelogVersion": "0.50.9",
-  "defaultProvider": "google-antigravity",
-  "defaultModel": "claude-opus-4-5-thinking",
+  "shellPath": "/bin/zsh",
+  "lastChangelogVersion": "0.60.0",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.4",
   "defaultThinkingLevel": "high",
   "hideThinkingBlock": false,
   "packages": [
@@ -64,18 +64,32 @@
     }
   ],
   "enabledModels": [
+    "github-copilot/claude-opus-4.6",
     "github-copilot/claude-opus-4.5",
     "github-copilot/claude-sonnet-4.5",
     "github-copilot/gpt-5.2",
     "github-copilot/gpt-5.2-codex",
     "openai-codex/gpt-5.2",
     "openai-codex/gpt-5.2-codex",
-    "google-antigravity/claude-opus-4-5-thinking",
-    "google-antigravity/claude-sonnet-4-5",
-    "google-antigravity/claude-sonnet-4-5-thinking",
-    "google-antigravity/gemini-3-flash",
-    "google-antigravity/gemini-3-pro-high",
-    "google-antigravity/gemini-3-pro-low",
-    "openrouter-moonshot/moonshotai/kimi-k2.5"
-  ]
+    "openai-codex/gpt-5.3-codex",
+    "openai-codex/gpt-5.4",
+    "llamacpp/qwen3.5-35b-a3b-ud-q4_k_xl",
+    "anthropic/claude-opus-4-6",
+    "anthropic/claude-sonnet-4-6",
+    "github-copilot/gpt-5.4",
+    "github-copilot/gpt-5.3-codex",
+    "github-copilot/gemini-3.1-pro-preview",
+    "openrouter/hunter-alpha",
+    "openrouter/healer-alpha",
+    "agentrouter/claude-opus-4-6",
+    "safzan-proxy/claude-opus-4-6"
+  ],
+  "compaction": {
+    "enabled": true
+  },
+  "doubleEscapeAction": "tree",
+  "treeFilterMode": "default",
+  "theme": "dark",
+  "transport": "websocket",
+  "steeringMode": "all"
 }

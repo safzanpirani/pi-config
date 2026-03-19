@@ -12,9 +12,36 @@ import { Type } from "@sinclair/typebox";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { ListToolsResultSchema, CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const EXA_MCP_URL = "https://mcp.exa.ai/mcp?tools=web_search_exa,research_paper_search_exa,news_search_exa,company_search_exa,crawling_exa,get_page_contents_exa";
+
+const EXA_TOOLS = [
+  {
+    name: "web_search_exa",
+    description: "Search the web for any topic and get clean, ready-to-use content.",
+  },
+  {
+    name: "research_paper_search_exa",
+    description: "Search for research papers and scholarly content.",
+  },
+  {
+    name: "news_search_exa",
+    description: "Search recent news articles.",
+  },
+  {
+    name: "company_search_exa",
+    description: "Search for company information.",
+  },
+  {
+    name: "crawling_exa",
+    description: "Get the full content of a specific webpage.",
+  },
+  {
+    name: "get_page_contents_exa",
+    description: "Get page contents from a specific webpage.",
+  },
+] as const;
 
 let exaClient: Client | null = null;
 let exaTransport: StreamableHTTPClientTransport | null = null;
@@ -23,9 +50,8 @@ let connecting = false;
 async function getExaClient(): Promise<Client> {
   if (exaClient) return exaClient;
   if (connecting) {
-    // Wait for connection
     while (connecting) {
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     if (exaClient) return exaClient;
   }
@@ -62,12 +88,36 @@ function parseArgumentsJson(value: unknown): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-function sanitizeToolName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, "_");
+function toToolContent(result: { content?: Array<any> }) {
+  const content: Array<any> = [];
+  for (const item of result.content ?? []) {
+    if (item.type === "text") {
+      content.push({ type: "text", text: item.text });
+    } else {
+      content.push({ type: "text", text: `[exa:${item.type}] ${JSON.stringify(item)}` });
+    }
+  }
+  return content.length ? content : [{ type: "text", text: "(empty result)" }];
+}
+
+async function callExaTool(toolName: string, rawArgumentsJson: unknown) {
+  const client = await getExaClient();
+  const args = parseArgumentsJson(rawArgumentsJson);
+  const result = await client.request(
+    {
+      method: "tools/call",
+      params: { name: toolName, arguments: args },
+    },
+    CallToolResultSchema
+  );
+
+  return {
+    content: toToolContent(result),
+    details: { tool: toolName, raw: result },
+  };
 }
 
 export default function(pi: ExtensionAPI) {
-  // Register generic Exa call tool
   pi.registerTool({
     name: "exa_call",
     label: "Exa Call",
@@ -80,32 +130,9 @@ export default function(pi: ExtensionAPI) {
         })
       ),
     }),
-    async execute(_toolCallId, params, _onUpdate, ctx, signal) {
+    async execute(_toolCallId, params) {
       try {
-        const client = await getExaClient();
-        const args = parseArgumentsJson((params as Record<string, unknown>).argumentsJson);
-        
-        const result = await client.request(
-          {
-            method: "tools/call",
-            params: { name: params.tool, arguments: args },
-          },
-          CallToolResultSchema
-        );
-
-        const content: Array<any> = [];
-        for (const item of result.content) {
-          if (item.type === "text") {
-            content.push({ type: "text", text: item.text });
-          } else {
-            content.push({ type: "text", text: `[exa:${item.type}] ${JSON.stringify(item)}` });
-          }
-        }
-
-        return {
-          content: content.length ? content : [{ type: "text", text: "(empty result)" }],
-          details: { tool: params.tool, raw: result },
-        };
+        return await callExaTool(params.tool, (params as Record<string, unknown>).argumentsJson);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         return {
@@ -117,82 +144,47 @@ export default function(pi: ExtensionAPI) {
     },
   });
 
-  // On session start, list available tools and register shortcuts
-  pi.on("session_start", async (_event, ctx) => {
-    try {
-      const client = await getExaClient();
-      const listed = await client.request(
-        { method: "tools/list", params: {} },
-        ListToolsResultSchema
-      );
+  for (const tool of EXA_TOOLS) {
+    pi.registerTool({
+      name: tool.name,
+      label: tool.name,
+      description: tool.description,
+      parameters: Type.Object({
+        argumentsJson: Type.Optional(
+          Type.String({
+            description: 'Arguments as JSON (e.g., {"query":"...", "numResults": 5})',
+          })
+        ),
+      }),
+      async execute(_toolCallId, params: any) {
+        try {
+          return await callExaTool(tool.name, params?.argumentsJson);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `Exa error: ${msg}` }],
+            details: {},
+            isError: true,
+          };
+        }
+      },
+    });
+  }
 
-      const existingTools = pi.getAllTools().map(t => t.name);
+  // Warm the remote connection in the background without blocking startup.
+  // Only do this in the interactive UI so short-lived print/RPC runs can exit cleanly.
+  pi.on("session_start", (_event, ctx) => {
+    if (!ctx?.hasUI) {
+      return;
+    }
 
-      for (const tool of listed.tools) {
-        const toolName = sanitizeToolName(tool.name);
-        
-        // Skip if already registered
-        if (existingTools.includes(toolName)) continue;
-
-        pi.registerTool({
-          name: toolName,
-          label: tool.name,
-          description: tool.description ?? `Exa: ${tool.name}`,
-          parameters: Type.Object({
-            argumentsJson: Type.Optional(
-              Type.String({
-                description: 'Arguments as JSON (e.g., {"query":"...", "numResults": 5})',
-              })
-            ),
-          }),
-          async execute(_toolCallId, params: any, _onUpdate, ctx2, signal) {
-            try {
-              const c = await getExaClient();
-              const args = parseArgumentsJson(params?.argumentsJson);
-              
-              const result = await c.request(
-                { method: "tools/call", params: { name: tool.name, arguments: args } },
-                CallToolResultSchema
-              );
-
-              const content: Array<any> = [];
-              for (const item of result.content) {
-                if (item.type === "text") {
-                  content.push({ type: "text", text: item.text });
-                } else {
-                  content.push({ type: "text", text: `[exa:${item.type}] ${JSON.stringify(item)}` });
-                }
-              }
-
-              return {
-                content: content.length ? content : [{ type: "text", text: "(empty result)" }],
-                details: { tool: tool.name, raw: result },
-              };
-            } catch (error) {
-              const msg = error instanceof Error ? error.message : String(error);
-              return {
-                content: [{ type: "text", text: `Exa error: ${msg}` }],
-                details: {},
-                isError: true,
-              };
-            }
-          },
-        });
-      }
-
-      if (ctx?.hasUI) {
-        ctx.ui.notify(`Exa: ${listed.tools.length} tools registered via Streamable HTTP`, "info");
-      }
-    } catch (error) {
+    void getExaClient().catch((error) => {
       const msg = error instanceof Error ? error.message : String(error);
       console.error("[exa-remote] Failed to connect:", msg);
-      if (ctx?.hasUI) {
-        ctx.ui.notify(`Exa connection failed: ${msg}`, "warning");
-      }
-    }
+      ctx.ui.notify(`Exa connection failed: ${msg}`, "warning");
+    });
   });
 
-  // Cleanup on shutdown
   pi.on("session_shutdown", async () => {
     if (exaTransport) {
       try {

@@ -1,120 +1,126 @@
-/**
- * Safzan LLM Proxy Extension
- * 
- * Registers custom proxy models (Kiro Claude variants)
- * Endpoint: https://llm.safzan.dev/v1
- */
-
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
-export default function(pi: ExtensionAPI) {
-  // Common compat settings for the proxy
-  const proxyCompat = {
-    supportsStore: false,
-    supportsDeveloperRole: false,
-    supportsReasoningEffort: false,
-    supportsUsageInStreaming: true,
-    maxTokensField: "max_tokens" as const,
-  };
+const AGENTROUTER_BASE_URL = "https://agentrouter.org";
+const CLAUDE_CODE_HEADERS = {
+  "user-agent": "claude-cli/2.1.75 (external, cli)",
+  "anthropic-version": "2023-06-01",
+  "anthropic-beta":
+    "interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,claude-code-20250219",
+  "x-app": "cli",
+  "x-stainless-arch": "arm64",
+  "x-stainless-lang": "js",
+  "x-stainless-os": "MacOS",
+  "x-stainless-package-version": "0.74.0",
+  "x-stainless-runtime": "node",
+  "x-stainless-runtime-version": "v24.3.0",
+  "x-stainless-timeout": "600",
+  "content-type": "application/json",
+} as const;
 
-  // Sonnet pricing ($/million tokens)
-  const sonnetCost = {
-    input: 3.0,
-    output: 15.0,
-    cacheRead: 0.3,
-    cacheWrite: 3.75
+type AuthFile = {
+  agentrouter?: {
+    type?: string;
+    key?: string;
   };
+};
 
-  // Opus pricing ($/million tokens)
-  const opusCost = {
-    input: 5.0,
-    output: 25.0,
-    cacheRead: 0.5,
-    cacheWrite: 6.25
-  };
+const opusCost = {
+  input: 5.0,
+  output: 25.0,
+  cacheRead: 0.5,
+  cacheWrite: 6.25,
+};
 
-  pi.registerProvider("safzan-proxy", {
-    baseUrl: "https://llm.safzan.dev/v1",
-    apiKey: "safzan",
+const directAgentRouterModel = {
+  id: "claude-opus-4-6",
+  name: "Claude Opus 4.6 (AgentRouter Claude Code)",
+  reasoning: true,
+  input: ["text", "image"] as ("text" | "image")[],
+  cost: opusCost,
+  contextWindow: 1280000,
+  maxTokens: 32768,
+};
+
+function getAgentDir() {
+  return process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
+}
+
+function resolveAgentRouterApiKey() {
+  const envKey = process.env.AGENTROUTER_API_KEY?.trim();
+  if (envKey) return envKey;
+
+  const authPath = join(getAgentDir(), "auth.json");
+  if (!existsSync(authPath)) return undefined;
+
+  try {
+    const auth = JSON.parse(readFileSync(authPath, "utf8")) as AuthFile;
+    const apiKey = auth.agentrouter?.type === "api_key" ? auth.agentrouter.key?.trim() : undefined;
+    return apiKey || undefined;
+  } catch (error) {
+    console.warn(
+      `[safzan-proxy] Failed to read AgentRouter API key from ${authPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
+}
+
+function registerDirectAgentRouter(pi: ExtensionAPI, providerName: string, apiKey: string) {
+  pi.registerProvider(providerName, {
+    baseUrl: AGENTROUTER_BASE_URL,
+    apiKey,
+    api: "anthropic-messages",
+    headers: {
+      ...CLAUDE_CODE_HEADERS,
+      authorization: `Bearer ${apiKey}`,
+      "x-api-key": apiKey,
+    },
+    models: [{ ...directAgentRouterModel }],
+  });
+}
+
+export default function (pi: ExtensionAPI) {
+  const agentRouterApiKey = resolveAgentRouterApiKey();
+
+  if (!agentRouterApiKey) {
+    console.warn(
+      `[safzan-proxy] No AgentRouter API key found in ${join(
+        getAgentDir(),
+        "auth.json",
+      )} or AGENTROUTER_API_KEY; skipping AgentRouter provider registration`,
+    );
+  } else {
+    registerDirectAgentRouter(pi, "agentrouter", agentRouterApiKey);
+    registerDirectAgentRouter(pi, "safzan-proxy", agentRouterApiKey);
+    console.log("[safzan-proxy] Registered native Anthropic AgentRouter providers with Claude Code headers");
+  }
+
+  pi.registerProvider("llamacpp", {
+    baseUrl: "http://192.168.0.94:8080/v1",
+    apiKey: "sk-local",
+    authHeader: true,
     api: "openai-completions",
     models: [
       {
-        id: "kiro-claude-sonnet-4-5-agentic",
-        name: "Kiro Claude Sonnet 4.5 Agentic",
+        id: "qwen3.5-35b-a3b-ud-q4_k_xl",
+        name: "Qwen3.5 35B A3B UD Q4_K_XL (LAN)",
         reasoning: false,
-        input: ["text", "image"],
-        cost: sonnetCost,
-        contextWindow: 200000,
-        maxTokens: 64000,
-        compat: proxyCompat
+        input: ["text"],
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        contextWindow: 85000,
+        maxTokens: 85000,
       },
-      {
-        id: "kiro-claude-opus-4-5-agentic",
-        name: "Kiro Claude Opus 4.5 Agentic",
-        reasoning: false,
-        input: ["text", "image"],
-        cost: opusCost,
-        contextWindow: 200000,
-        maxTokens: 64000,
-        compat: proxyCompat
-      },
-      {
-        id: "kiro-claude-opus-4-6-agentic",
-        name: "Kiro Claude Opus 4.6 Agentic",
-        reasoning: false,
-        input: ["text", "image"],
-        cost: opusCost,
-        contextWindow: 200000,
-        maxTokens: 64000,
-        compat: proxyCompat
-      },
-      {
-        id: "gemini-claude-opus-4-5-thinking",
-        name: "Gemini Claude Opus 4.5 Thinking",
-        // reasoning: false to work around CLIProxyAPI token counting bug
-        // CLIProxyAPI adds thoughtsTokenCount to prompt_tokens AND reports it
-        // as reasoning_tokens, causing pi-agent to double-subtract → negative input
-        reasoning: false,
-        input: ["text", "image"],
-        cost: opusCost,
-        contextWindow: 200000,
-        maxTokens: 64000,
-        compat: proxyCompat
-      },
-      {
-        id: "gemini-claude-opus-4-6-thinking",
-        name: "Gemini Claude Opus 4.6 Thinking",
-        // reasoning: false — same CLIProxyAPI workaround
-        reasoning: false,
-        input: ["text", "image"],
-        cost: opusCost,
-        contextWindow: 200000,
-        maxTokens: 64000,
-        compat: proxyCompat
-      },
-      {
-        id: "gemini-claude-sonnet-4-5-thinking",
-        name: "Gemini Claude Sonnet 4.5 Thinking",
-        // reasoning: false — same CLIProxyAPI workaround
-        reasoning: false,
-        input: ["text", "image"],
-        cost: sonnetCost,
-        contextWindow: 200000,
-        maxTokens: 64000,
-        compat: proxyCompat
-      },
-      {
-        id: "gemini-claude-sonnet-4-5",
-        name: "Gemini Claude Sonnet 4.5",
-        reasoning: false,
-        input: ["text", "image"],
-        cost: sonnetCost,
-        contextWindow: 200000,
-        maxTokens: 64000,
-        compat: proxyCompat
-      }
-    ]
+    ],
   });
-  
-  console.log("[safzan-proxy] Registered 7 models with Anthropic pricing");
+
+  console.log("[llamacpp] Registered 1 LAN model");
 }

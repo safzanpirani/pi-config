@@ -1,6 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname } from "node:path";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ListToolsResultSchema, CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -22,7 +25,18 @@ type McpBridgeConfig = {
   shortcuts?: Record<string, McpShortcutConfig>;
 };
 
+type CachedServerTool = {
+  sourceToolName: string;
+  description?: string;
+};
+
+type McpShortcutCache = {
+  version: 1;
+  servers: Record<string, CachedServerTool[]>;
+};
+
 const DEFAULT_CONFIG_PATH = "~/.pi/agent/mcp.json";
+const DEFAULT_CACHE_PATH = "~/.pi/agent/mcp-tools-cache.json";
 
 function expandHome(path: string): string {
   if (path.startsWith("~/")) {
@@ -32,14 +46,10 @@ function expandHome(path: string): string {
   return path;
 }
 
-async function loadConfig(pi: ExtensionAPI): Promise<{ path: string; config: McpBridgeConfig } | null> {
+function loadConfig(): { path: string; config: McpBridgeConfig } | null {
   const path = expandHome(DEFAULT_CONFIG_PATH);
   try {
-    const res = await pi.exec("node", ["-e", `process.stdout.write(require('node:fs').readFileSync(${JSON.stringify(path)}, 'utf8'))`], {
-      timeout: 2000,
-    });
-    if (res.code !== 0) return null;
-    const parsed = JSON.parse(res.stdout) as McpBridgeConfig;
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as McpBridgeConfig;
     if (!parsed?.servers || typeof parsed.servers !== "object") return null;
     return { path, config: parsed };
   } catch {
@@ -47,10 +57,35 @@ async function loadConfig(pi: ExtensionAPI): Promise<{ path: string; config: Mcp
   }
 }
 
+function loadShortcutCache(): McpShortcutCache {
+  const path = expandHome(DEFAULT_CACHE_PATH);
+  try {
+    if (!existsSync(path)) {
+      return { version: 1, servers: {} };
+    }
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<McpShortcutCache>;
+    return {
+      version: 1,
+      servers: parsed.servers && typeof parsed.servers === "object" ? parsed.servers : {},
+    };
+  } catch {
+    return { version: 1, servers: {} };
+  }
+}
+
+function saveShortcutCache(cache: McpShortcutCache): void {
+  const path = expandHome(DEFAULT_CACHE_PATH);
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(cache, null, 2));
+  } catch {
+    // ignore cache write failures
+  }
+}
+
 function resolveEnv(env: McpServerConfig["env"]): Record<string, string> {
   const out: Record<string, string> = {};
 
-  // env: ["FOO", "BAR"] => inherit from process.env
   if (Array.isArray(env)) {
     for (const name of env) {
       const val = process.env[name];
@@ -59,7 +94,6 @@ function resolveEnv(env: McpServerConfig["env"]): Record<string, string> {
     return out;
   }
 
-  // env: { "FOO": "literal", "BAR": "$FROM_ENV" }
   if (env && typeof env === "object") {
     for (const [key, value] of Object.entries(env)) {
       if (typeof value !== "string") continue;
@@ -77,9 +111,11 @@ function resolveEnv(env: McpServerConfig["env"]): Record<string, string> {
 
 export default function (pi: ExtensionAPI) {
   const clients = new Map<string, { client: Client; transport: StdioClientTransport }>();
+  const shortcutCache = loadShortcutCache();
+  const registeredShortcutKeys = new Set<string>();
+  const warmups = new Map<string, Promise<void>>();
 
   function sanitizeToolName(name: string): string {
-    // Google function calling is picky; keep it simple.
     return name.replace(/[^a-zA-Z0-9_]/g, "_");
   }
 
@@ -97,8 +133,80 @@ export default function (pi: ExtensionAPI) {
     return parsed as Record<string, unknown>;
   }
 
+  function extractToolArgs(
+    params: Record<string, unknown> | undefined,
+    wrapperKeys: string[] = []
+  ): Record<string, unknown> {
+    if (!params || typeof params !== "object" || Array.isArray(params)) return {};
+    if (typeof params.argumentsJson === "string") {
+      return parseArgumentsJson(params.argumentsJson);
+    }
+
+    const args: Record<string, unknown> = {};
+    const excluded = new Set(["argumentsJson", ...wrapperKeys]);
+    for (const [key, value] of Object.entries(params)) {
+      if (excluded.has(key) || value === undefined) continue;
+      args[key] = value;
+    }
+    return args;
+  }
+
+  function normalizeKnownArgs(
+    serverName: string,
+    toolName: string,
+    args: Record<string, unknown>,
+    cwd?: string
+  ): Record<string, unknown> {
+    const normalized = { ...args };
+
+    if (serverName === "morph-mcp" && toolName === "edit_file") {
+      if (typeof normalized.instruction !== "string" || normalized.instruction.trim().length === 0) {
+        const target = typeof normalized.path === "string" && normalized.path.trim().length > 0
+          ? basename(normalized.path)
+          : "this file";
+        normalized.instruction = `I am applying the requested edit to ${target}.`;
+      }
+      return normalized;
+    }
+
+    if (
+      serverName === "morph-mcp" &&
+      (toolName === "codebase_search" || toolName === "warpgrep_codebase_search")
+    ) {
+      if (typeof normalized.search_string !== "string" && typeof normalized.query === "string") {
+        normalized.search_string = normalized.query;
+      }
+      if (typeof normalized.repo_path !== "string" && typeof cwd === "string" && cwd.length > 0) {
+        normalized.repo_path = cwd;
+      }
+      delete normalized.query;
+      return normalized;
+    }
+
+    if (
+      serverName === "morph-mcp" &&
+      (toolName === "github_codebase_search" || toolName === "warpgrep_github_search")
+    ) {
+      if (typeof normalized.search_string !== "string" && typeof normalized.query === "string") {
+        normalized.search_string = normalized.query;
+      }
+      delete normalized.query;
+    }
+
+    return normalized;
+  }
+
+  function toToolContent(result: { content?: Array<any> }) {
+    const content: Array<any> = [];
+    for (const item of result.content ?? []) {
+      if (item.type === "text") content.push({ type: "text", text: item.text });
+      else content.push({ type: "text", text: `[mcp:${item.type}] ${JSON.stringify(item)}` });
+    }
+    return content.length ? content : [{ type: "text", text: "(empty result)" }];
+  }
+
   async function getClient(serverName: string, ctx: any, signal?: AbortSignal) {
-    const loaded = await loadConfig(pi);
+    const loaded = loadConfig();
     if (!loaded) throw new Error(`Missing MCP config at ${DEFAULT_CONFIG_PATH}`);
     const server = loaded.config.servers[serverName];
     if (!server) throw new Error(`Unknown MCP server '${serverName}' (see ${loaded.path})`);
@@ -128,6 +236,103 @@ export default function (pi: ExtensionAPI) {
     return client;
   }
 
+  function registerShortcutTool(serverName: string, sourceToolName: string, description?: string) {
+    const shortcutKey = `${serverName}:${sourceToolName}`;
+    if (registeredShortcutKeys.has(shortcutKey)) {
+      return;
+    }
+
+    const existing = new Set(pi.getAllTools().map((tool) => tool.name));
+    const preferred = sanitizeToolName(sourceToolName);
+    const fallback = sanitizeToolName(`mcp_${serverName}_${sourceToolName}`);
+    const toolName = !existing.has(preferred)
+      ? preferred
+      : (!existing.has(fallback) ? fallback : null);
+
+    if (!toolName) {
+      return;
+    }
+
+    registeredShortcutKeys.add(shortcutKey);
+
+    pi.registerTool({
+      name: toolName,
+      label: toolName,
+      description: `MCP ${serverName}:${sourceToolName}${description ? ` - ${description}` : ""}`,
+      parameters: Type.Object(
+        {
+          argumentsJson: Type.Optional(
+            Type.String({
+              description: "Tool arguments as JSON object string (e.g. {\"query\":\"...\"}).",
+            })
+          ),
+        },
+        { additionalProperties: true }
+      ),
+      async execute(_toolCallId, params: any, signal, _onUpdate, ctx) {
+        const client = await getClient(serverName, ctx, signal);
+        const args = normalizeKnownArgs(
+          serverName,
+          sourceToolName,
+          extractToolArgs(params as Record<string, unknown> | undefined),
+          ctx?.cwd
+        );
+        const result = await client.request(
+          { method: "tools/call", params: { name: sourceToolName, arguments: args } },
+          CallToolResultSchema
+        );
+
+        return {
+          content: toToolContent(result),
+          details: { mcp: { server: serverName, tool: sourceToolName }, raw: result },
+        };
+      },
+    });
+  }
+
+  function hydrateCachedShortcuts(serverName: string) {
+    for (const tool of shortcutCache.servers[serverName] ?? []) {
+      registerShortcutTool(serverName, tool.sourceToolName, tool.description);
+    }
+  }
+
+  function rememberServerTools(serverName: string, tools: Array<{ name: string; description?: string }>) {
+    shortcutCache.servers[serverName] = tools.map((tool) => ({
+      sourceToolName: tool.name,
+      description: tool.description,
+    }));
+    saveShortcutCache(shortcutCache);
+  }
+
+  function warmServerTools(serverName: string, ctx: any) {
+    if (warmups.has(serverName)) {
+      return;
+    }
+
+    const task = (async () => {
+      const client = await getClient(serverName, ctx);
+      const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
+
+      for (const tool of listed.tools) {
+        registerShortcutTool(serverName, tool.name, tool.description);
+      }
+
+      rememberServerTools(serverName, listed.tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+      })));
+    })()
+      .catch((error) => {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (ctx?.hasUI) ctx.ui.notify(`MCP(${serverName}) failed: ${msg}`, "error");
+      })
+      .finally(() => {
+        warmups.delete(serverName);
+      });
+
+    warmups.set(serverName, task);
+  }
+
   pi.on("session_shutdown", async () => {
     const all = [...clients.values()];
     clients.clear();
@@ -149,13 +354,21 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       server: Type.String({ description: "Server name from ~/.pi/agent/mcp.json" }),
     }),
-    async execute(_toolCallId, params, _onUpdate, ctx, signal) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const client = await getClient(params.server, ctx, signal);
       const result = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
 
-      const lines = result.tools.map((t) => {
-        const desc = t.description ? ` - ${t.description}` : "";
-        return `- ${t.name}${desc}`;
+      for (const tool of result.tools) {
+        registerShortcutTool(params.server, tool.name, tool.description);
+      }
+      rememberServerTools(params.server, result.tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+      })));
+
+      const lines = result.tools.map((tool) => {
+        const desc = tool.description ? ` - ${tool.description}` : "";
+        return `- ${tool.name}${desc}`;
       });
 
       return {
@@ -170,18 +383,26 @@ export default function (pi: ExtensionAPI) {
     label: "MCP Call",
     description:
       "Call any MCP tool by name. Use mcp_list_tools first to discover tool names. Servers configured in ~/.pi/agent/mcp.json.",
-    parameters: Type.Object({
-      server: Type.String({ description: "Server name from ~/.pi/agent/mcp.json" }),
-      tool: Type.String({ description: "Tool name (from mcp_list_tools)" }),
-      argumentsJson: Type.Optional(
-        Type.String({
-          description: "Tool arguments as a JSON object string (e.g. {\"query\":\"...\"}).",
-        })
-      ),
-    }),
-    async execute(_toolCallId, params, _onUpdate, ctx, signal) {
+    parameters: Type.Object(
+      {
+        server: Type.String({ description: "Server name from ~/.pi/agent/mcp.json" }),
+        tool: Type.String({ description: "Tool name (from mcp_list_tools)" }),
+        argumentsJson: Type.Optional(
+          Type.String({
+            description: "Tool arguments as a JSON object string (e.g. {\"query\":\"...\"}).",
+          })
+        ),
+      },
+      { additionalProperties: true }
+    ),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const client = await getClient(params.server, ctx, signal);
-      const args = parseArgumentsJson((params as Record<string, unknown>).argumentsJson);
+      const args = normalizeKnownArgs(
+        params.server,
+        params.tool,
+        extractToolArgs(params as Record<string, unknown>, ["server", "tool"]),
+        ctx?.cwd
+      );
       const result = await client.request(
         {
           method: "tools/call",
@@ -190,23 +411,17 @@ export default function (pi: ExtensionAPI) {
         CallToolResultSchema
       );
 
-      // Pass through MCP content blocks as-is where possible; fall back to text.
-      const content: Array<any> = [];
-      for (const item of result.content) {
-        if (item.type === "text") content.push({ type: "text", text: item.text });
-        else content.push({ type: "text", text: `[mcp:${item.type}] ${JSON.stringify(item)}` });
-      }
-
       return {
-        content: content.length ? content : [{ type: "text", text: "(empty result)" }],
+        content: toToolContent(result),
         details: { mcp: { server: params.server, tool: params.tool }, raw: result },
       };
     },
   });
 
-  // Optional shortcut tools (convenience wrappers)
-  pi.on("session_start", async (_event, ctx) => {
-    const loaded = await loadConfig(pi);
+  // Restore cached shortcut tools instantly, then refresh them in the background.
+  // Only warm MCP servers in the interactive UI so short-lived print/RPC runs can exit cleanly.
+  pi.on("session_start", (_event, ctx) => {
+    const loaded = loadConfig();
     if (!loaded) {
       if (ctx?.hasUI) {
         ctx.ui.notify(
@@ -217,58 +432,10 @@ export default function (pi: ExtensionAPI) {
       return;
     }
 
-    // Expose each server's tools as pi tools.
-    for (const [serverName, _serverCfg] of Object.entries(loaded.config.servers ?? {})) {
-      try {
-        const client = await getClient(serverName, ctx);
-        const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
-
-        for (const tool of listed.tools) {
-          const preferred = sanitizeToolName(tool.name);
-          const fallback = sanitizeToolName(`mcp_${serverName}_${tool.name}`);
-          const existing = pi.getAllTools().map((t) => t.name);
-
-          const toolName = !existing.includes(preferred)
-            ? preferred
-            : (!existing.includes(fallback) ? fallback : null);
-
-          if (!toolName) continue;
-
-          pi.registerTool({
-            name: toolName,
-            label: toolName,
-            description: `MCP ${serverName}:${tool.name}${tool.description ? ` - ${tool.description}` : ""}`,
-            parameters: Type.Object({
-              argumentsJson: Type.Optional(
-                Type.String({
-                  description: "Tool arguments as JSON object string (e.g. {\"query\":\"...\"}).",
-                })
-              ),
-            }),
-            async execute(_toolCallId, params: any, _onUpdate, ctx2, signal) {
-              const c = await getClient(serverName, ctx2, signal);
-              const args = parseArgumentsJson(params?.argumentsJson);
-              const result = await c.request(
-                { method: "tools/call", params: { name: tool.name, arguments: args } },
-                CallToolResultSchema
-              );
-
-              const content: Array<any> = [];
-              for (const item of result.content) {
-                if (item.type === "text") content.push({ type: "text", text: item.text });
-                else content.push({ type: "text", text: `[mcp:${item.type}] ${JSON.stringify(item)}` });
-              }
-
-              return {
-                content: content.length ? content : [{ type: "text", text: "(empty result)" }],
-                details: { mcp: { server: serverName, tool: tool.name }, raw: result },
-              };
-            },
-          });
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (ctx?.hasUI) ctx.ui.notify(`MCP(${serverName}) failed: ${msg}`, "error");
+    for (const serverName of Object.keys(loaded.config.servers ?? {})) {
+      hydrateCachedShortcuts(serverName);
+      if (ctx?.hasUI) {
+        warmServerTools(serverName, ctx);
       }
     }
   });

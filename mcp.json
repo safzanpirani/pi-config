@@ -4,12 +4,8 @@
       "command": "npx",
       "args": ["-y", "@morphllm/morphmcp"],
       "env": {
-        "MORPH_API_KEY": "sk-I_A7WUVOIyF0fpqTQ8GQ2Whww1slcZLgoJEIA3hXOamQbH2i"
+        "MORPH_API_KEY": "YOUR_MORPH_API_KEY"
       }
-    },
-    "context7": {
-      "command": "bunx",
-      "args": ["-y", "@upstash/context7-mcp"]
     }
   }
 }
