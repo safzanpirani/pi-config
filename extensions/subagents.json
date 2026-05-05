@@ -1,0 +1,40 @@
+{
+  "subagents": {
+    "scout": {
+      "candidates": [
+        { "provider": "openai-codex", "model": "gpt-5.4-mini" }
+      ],
+      "enabled": true
+    },
+    "lookout": {
+      "candidates": [
+        { "provider": "openai-codex", "model": "gpt-5.4-mini" }
+      ],
+      "enabled": true
+    },
+    "oracle": {
+      "candidates": [
+        { "provider": "openai-codex", "model": "gpt-5.5" }
+      ],
+      "enabled": true
+    },
+    "reviewer": {
+      "candidates": [
+        { "provider": "openai-codex", "model": "gpt-5.5" }
+      ],
+      "enabled": true
+    },
+    "jester": {
+      "candidates": [
+        { "provider": "openai-codex", "model": "gpt-5.4-mini" }
+      ],
+      "enabled": true
+    },
+    "worker": {
+      "candidates": [
+        { "provider": "openai-codex", "model": "gpt-5.5" }
+      ],
+      "enabled": true
+    }
+  }
+}

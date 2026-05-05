@@ -1,0 +1,17 @@
+{
+  "providers": {
+    "openai-codex": {
+      "widget": "always",
+      "warnings": true
+    },
+    "anthropic": {
+      "widget": "warnings-only",
+      "warnings": true
+    },
+    "synthetic": {
+      "widget": "warnings-only",
+      "warnings": true
+    }
+  },
+  "refreshIntervalMinutes": 5
+}

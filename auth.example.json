@@ -1,23 +1,62 @@
 {
-  "github-copilot": {
+  "openrouter": {
+    "type": "api_key",
+    "key": "..."
+  },
+  "safzan-proxy": {
+    "type": "api_key",
+    "key": "..."
+  },
+  "google-antigravity": {
     "type": "oauth",
-    "refresh": "ghu_... (created by /login github-copilot)",
+    "refresh": "...",
     "access": "...",
-    "expires": 1234567890000
+    "expires": 1234567890000,
+    "projectId": "your-project-id"
+  },
+  "opencode-zen": {
+    "type": "api_key",
+    "key": "..."
+  },
+  "oc": {
+    "type": "api_key",
+    "key": "..."
+  },
+  "llamacpp": {
+    "type": "api_key",
+    "key": "..."
   },
   "openai-codex": {
     "type": "oauth",
-    "refresh": "rt_... (created by /login openai-codex)",
-    "access": "eyJ...",
+    "access": "...",
+    "refresh": "...",
     "expires": 1234567890000,
     "accountId": "your-account-id"
   },
-  "openrouter": {
-    "type": "api_key",
-    "key": "sk-or-..."
-  },
   "agentrouter": {
     "type": "api_key",
-    "key": "ar-... or whatever AgentRouter issued you"
+    "key": "..."
+  },
+  "anthropic": {
+    "type": "oauth",
+    "refresh": "...",
+    "access": "...",
+    "expires": 1234567890000
+  },
+  "fireworks": {
+    "type": "api-key",
+    "apiKey": "..."
+  },
+  "cursor-agent": {
+    "type": "oauth",
+    "access": "...",
+    "refresh": "...",
+    "expires": 1234567890000
+  },
+  "github-copilot": {
+    "type": "oauth",
+    "refresh": "...",
+    "access": "...",
+    "expires": 1234567890000
   }
 }

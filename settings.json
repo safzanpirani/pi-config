@@ -1,32 +1,102 @@
 {
   "shellPath": "/bin/zsh",
-  "lastChangelogVersion": "0.60.0",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.4",
+  "lastChangelogVersion": "0.72.1",
+  "defaultProvider": "opencode-go",
+  "defaultModel": "deepseek-v4-pro",
   "defaultThinkingLevel": "high",
   "hideThinkingBlock": false,
+  "subagents": {
+    "scout": {
+      "candidates": [
+        {
+          "provider": "openai-codex",
+          "model": "gpt-5.4-mini"
+        }
+      ],
+      "enabled": true
+    },
+    "lookout": {
+      "candidates": [
+        {
+          "provider": "openai-codex",
+          "model": "gpt-5.4-mini"
+        }
+      ],
+      "enabled": true
+    },
+    "oracle": {
+      "candidates": [
+        {
+          "provider": "openai-codex",
+          "model": "gpt-5.5"
+        }
+      ],
+      "enabled": true
+    },
+    "reviewer": {
+      "candidates": [
+        {
+          "provider": "openai-codex",
+          "model": "gpt-5.5"
+        }
+      ],
+      "enabled": true
+    },
+    "jester": {
+      "candidates": [
+        {
+          "provider": "openai-codex",
+          "model": "gpt-5.4-mini"
+        }
+      ],
+      "enabled": true
+    },
+    "worker": {
+      "candidates": [
+        {
+          "provider": "openai-codex",
+          "model": "gpt-5.5"
+        }
+      ],
+      "enabled": true
+    }
+  },
+  "extensions": [
+    "/Users/safzan/.pi/agent/extensions/tool-result-cleanup.ts",
+    "/Users/safzan/.pi/agent/extensions/copilot-backend-warning.ts",
+    "-extensions/pi-prefill.ts",
+    "+extensions/tool-result-cleanup.ts",
+    "/Users/safzan/.pi/agent/git/github.com/kcosr/pi-extensions/apply-patch-tool/index.ts"
+  ],
   "packages": [
     {
       "source": "git:github.com/aliou/pi-extensions",
       "extensions": [
         "extensions/defaults/index.ts",
-        "extensions/guardrails/index.ts",
-        "extensions/meta/index.ts",
-        "extensions/planning/index.ts",
-        "extensions/presenter/index.ts",
         "extensions/providers/index.ts",
-        "extensions/session-management/index.ts",
-        "extensions/the-dumb-zone/index.ts"
+        "extensions/the-dumb-zone/index.ts",
+        "-extensions/subagents/index.ts",
+        "+extensions/btw/index.ts",
+        "-extensions/breadcrumbs/index.ts",
+        "+extensions/editor/index.ts",
+        "+extensions/planning/index.ts",
+        "+extensions/qq/index.ts",
+        "+extensions/introspection/index.ts",
+        "+extensions/tools/ask-user/index.ts"
       ]
     },
     {
       "source": "git:github.com/tmustier/pi-extensions",
       "extensions": [
-        "pi-extensions/agent-guidance/agent-guidance.ts",
-        "pi-extensions/code-actions/index.ts",
-        "pi-extensions/raw-paste/index.ts",
-        "pi-extensions/tab-status/tab-status.ts",
-        "pi-extensions/usage-extension/index.ts"
+        "agent-guidance/agent-guidance.ts",
+        "code-actions/index.ts",
+        "raw-paste/index.ts",
+        "tab-status/tab-status.ts",
+        "usage-extension/index.ts"
+      ],
+      "skills": [
+        "-ralph-wiggum/SKILL.md",
+        "+pi-ralph-wiggum/SKILL.md"
       ]
     },
     {
@@ -36,10 +106,19 @@
         "./lsp/lsp.ts",
         "./lsp/lsp-tool.ts",
         "./permission/permission.ts",
-        "./repeat/repeat.ts"
+        "./repeat/repeat.ts",
+        "+token-rate/token-rate.ts"
       ]
     },
-    "npm:pi-web-access",
+    {
+      "source": "npm:pi-web-access",
+      "extensions": [
+        "-index.ts"
+      ],
+      "skills": [
+        "-skills/librarian/SKILL.md"
+      ]
+    },
     {
       "source": "npm:shitty-extensions",
       "extensions": [
@@ -49,40 +128,64 @@
         "./extensions/memory-mode.ts",
         "./extensions/plan-mode.ts",
         "./extensions/status-widget.ts",
-        "./extensions/usage-bar.ts"
+        "./extensions/usage-bar.ts",
+        "+extensions/cost-tracker.ts",
+        "+extensions/funny-working-message.ts",
+        "+extensions/handoff.ts",
+        "+extensions/loop.ts",
+        "-extensions/ultrathink.ts",
+        "+extensions/usage-bar.ts",
+        "-extensions/plan-mode.ts"
       ]
     },
+    "git:github.com/pasky/chrome-cdp-skill@v1.0.1",
+    "npm:pi-cursor-agent",
+    "npm:pi-subagents",
+    "-git:github.com/ShpetimA/pi-fff",
+    "git:github.com/prateekmedia/claude-agent-sdk-pi",
+    "npm:pi-autoresearch",
+    "npm:@aliou/pi-processes",
+    "npm:pi-markdown-preview",
     {
-      "source": "git:github.com/kcosr/pi-extensions",
+      "source": "git:github.com/injaneity/pi-computer-use@v0.2.1",
+      "skills": [
+        "-skills/computer-use/SKILL.md"
+      ],
       "extensions": [
-        "apply-patch-tool/index.ts",
-        "assistant/index.ts",
-        "codemap/index.ts",
-        "skill-picker/index.ts",
-        "toolwatch/extension/index.ts"
+        "-extensions/computer-use.ts"
       ]
     }
   ],
   "enabledModels": [
-    "github-copilot/claude-opus-4.6",
-    "github-copilot/claude-opus-4.5",
-    "github-copilot/claude-sonnet-4.5",
-    "github-copilot/gpt-5.2",
-    "github-copilot/gpt-5.2-codex",
-    "openai-codex/gpt-5.2",
-    "openai-codex/gpt-5.2-codex",
-    "openai-codex/gpt-5.3-codex",
-    "openai-codex/gpt-5.4",
-    "llamacpp/qwen3.5-35b-a3b-ud-q4_k_xl",
-    "anthropic/claude-opus-4-6",
-    "anthropic/claude-sonnet-4-6",
-    "github-copilot/gpt-5.4",
-    "github-copilot/gpt-5.3-codex",
+    "openrouter/anthropic/claude-opus-4.7",
+    "fireworks/accounts/fireworks/routers/kimi-k2p5-turbo",
     "github-copilot/gemini-3.1-pro-preview",
-    "openrouter/hunter-alpha",
-    "openrouter/healer-alpha",
-    "agentrouter/claude-opus-4-6",
-    "safzan-proxy/claude-opus-4-6"
+    "opencode-go/kimi-k2.6",
+    "baseten/moonshotai/Kimi-K2.6",
+    "novita/moonshotai/kimi-k2.6",
+    "opencode-go/glm-5.1",
+    "opencode-go/glm-5",
+    "opencode/kimi-k2.6",
+    "opencode/claude-opus-4-7",
+    "opencode/claude-opus-4-6",
+    "opencode/claude-opus-4-5",
+    "cursor-agent/claude-opus-4-7-high",
+    "cursor-agent/claude-opus-4-7-thinking-xhigh",
+    "cursor-agent/composer-2-fast",
+    "cursor-agent/composer-2",
+    "openai-codex/gpt-5.5",
+    "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-v4-flash",
+    "openai-codex/gpt-5.4",
+    "openai-codex/gpt-5.4-mini",
+    "github-copilot/claude-haiku-4.5",
+    "github-copilot/gemini-3-flash-preview",
+    "lmstudio/qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive",
+    "lmstudio/qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive-nothink",
+    "lmstudio/qwen3.6-27b-uncensored-hauhaucs-balanced-nothink",
+    "lmstudio/qwen3.6-27b-uncensored-hauhaucs-balanced",
+    "opencode-go/deepseek-v4-flash",
+    "opencode-go/deepseek-v4-pro"
   ],
   "compaction": {
     "enabled": true
@@ -90,6 +193,45 @@
   "doubleEscapeAction": "tree",
   "treeFilterMode": "default",
   "theme": "dark",
-  "transport": "websocket",
-  "steeringMode": "all"
+  "transport": "websocket-cached",
+  "steeringMode": "all",
+  "followUpMode": "all",
+  "providers": {
+    "openai-codex": {
+      "widget": "always",
+      "warnings": true
+    }
+  },
+  "skills": [
+    "-../../.agents/skills/agent-browser/SKILL.md",
+    "-../../.agents/skills/expressjs-development/SKILL.md",
+    "-../../.agents/skills/frontend-design/SKILL.md",
+    "-../../.agents/skills/langchain-architecture/SKILL.md",
+    "-../../.agents/skills/react-vite-expert/SKILL.md",
+    "-../../.agents/skills/shadcn-layouts/SKILL.md",
+    "-../../.agents/skills/supabase-postgres-best-practices/SKILL.md",
+    "-../../.agents/skills/tailwind-v4-shadcn/SKILL.md",
+    "+../../.agents/skills/vercel-react-best-practices/SKILL.md",
+    "-../../.agents/skills/web-design-guidelines/SKILL.md",
+    "-../../.agents/skills/xlsx/SKILL.md",
+    "-../../.agents/skills/grpo-rl-training/SKILL.md",
+    "-../../.agents/skills/opentui/SKILL.md",
+    "-../../.agents/skills/runpodctl/SKILL.md",
+    "-../../.agents/skills/caveman/SKILL.md",
+    "-../../.agents/skills/diagnose/SKILL.md",
+    "-../../.agents/skills/grill-me/SKILL.md",
+    "-../../.agents/skills/grill-with-docs/SKILL.md",
+    "-../../.agents/skills/improve-codebase-architecture/SKILL.md",
+    "-../../.agents/skills/setup-matt-pocock-skills/SKILL.md",
+    "-../../.agents/skills/tdd/SKILL.md",
+    "-../../.agents/skills/to-issues/SKILL.md",
+    "+skills/to-prd/SKILL.md",
+    "-../../.agents/skills/to-prd/SKILL.md",
+    "-../../.agents/skills/triage/SKILL.md",
+    "+skills/vercel-react-native-skills/SKILL.md",
+    "-../../.agents/skills/write-a-skill/SKILL.md",
+    "-../../.agents/skills/zoom-out/SKILL.md"
+  ],
+  "editorPaddingX": 0,
+  "quietStartup": false
 }

@@ -1,4 +1,5 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { keyHint, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -84,7 +85,9 @@ function saveShortcutCache(cache: McpShortcutCache): void {
 }
 
 function resolveEnv(env: McpServerConfig["env"]): Record<string, string> {
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  );
 
   if (Array.isArray(env)) {
     for (const name of env) {
@@ -205,6 +208,75 @@ export default function (pi: ExtensionAPI) {
     return content.length ? content : [{ type: "text", text: "(empty result)" }];
   }
 
+  function resultText(result: { content?: Array<any> }): string {
+    return (result.content ?? [])
+      .map((item) => item?.type === "text" ? String(item.text ?? "") : JSON.stringify(item))
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function compactToolText(text: string, maxLines = 8, maxChars = 1800): { preview: string; lineCount: number; truncated: boolean } {
+    const lines = text.split("\n");
+    const joined = lines.slice(0, maxLines).join("\n");
+    const preview = joined.length > maxChars ? `${joined.slice(0, maxChars - 1)}…` : joined;
+    return {
+      preview,
+      lineCount: lines.length,
+      truncated: lines.length > maxLines || joined.length > maxChars,
+    };
+  }
+
+  function renderExpandableResult(result: any, options: { expanded: boolean; isPartial?: boolean }, theme: any) {
+    if (options.isPartial) return new Text(theme.fg("warning", "Running MCP request..."), 0, 0);
+
+    const text = resultText(result) || "(empty result)";
+    const { preview, lineCount, truncated } = compactToolText(text);
+    const mcp = result?.details?.mcp;
+    const raw = result?.details?.raw;
+    const itemCount = Array.isArray(raw?.content) ? raw.content.length : undefined;
+    const title = mcp?.server && mcp?.tool ? `${mcp.server}:${mcp.tool}` : "MCP result";
+
+    let output = theme.fg(result?.isError ? "error" : "success", title);
+    output += theme.fg("dim", ` (${lineCount} line${lineCount === 1 ? "" : "s"}${itemCount !== undefined ? `, ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""})`);
+
+    if (!options.expanded) {
+      output += ` ${theme.fg("muted", keyHint("app.tools.expand", "to expand"))}`;
+      if (preview.trim()) output += `\n${theme.fg("dim", preview)}`;
+      if (truncated) output += `\n${theme.fg("muted", "… output compacted")}`;
+      return new Text(output, 0, 0);
+    }
+
+    output += ` ${theme.fg("muted", keyHint("app.tools.expand", "to collapse"))}`;
+    output += `\n${text}`;
+    return new Text(output, 0, 0);
+  }
+
+  function getShortcutPresentation(serverName: string, sourceToolName: string, description?: string) {
+    if (serverName === "morph-mcp" && sourceToolName === "edit_file") {
+      return {
+        description:
+          "MCP morph-mcp:edit_file - Apply structured file edits using Morph's fast-apply engine. Useful for targeted edits when you can provide enough surrounding context and use // ... existing code ... placeholders for unchanged sections.",
+        promptSnippet:
+          "Apply structured file edits with Morph fast-apply when it is a good fit for the requested change",
+        promptGuidelines: [
+          "Use edit_file for targeted edits when a concise patch with surrounding context is clearer than exact text replacement.",
+          "Use built-in edit for simple exact replacements, and write for new files or complete rewrites.",
+          "When using edit_file, include enough context to locate the edit and represent unchanged blocks with // ... existing code ... placeholders.",
+        ],
+      };
+    }
+
+    const suffix = description ? ` - ${description}` : "";
+    return {
+      description: `MCP ${serverName}:${sourceToolName}${suffix}`,
+      promptSnippet: `Call MCP tool ${serverName}:${sourceToolName}${suffix}`,
+      promptGuidelines: [
+        `Use ${sanitizeToolName(sourceToolName)} only when the user request matches MCP tool ${serverName}:${sourceToolName}.`,
+        `If unsure about arguments for ${sanitizeToolName(sourceToolName)}, use mcp_list_tools for server ${serverName} or mcp_call with explicit JSON arguments.`,
+      ],
+    };
+  }
+
   async function getClient(serverName: string, ctx: any, signal?: AbortSignal) {
     const loaded = loadConfig();
     if (!loaded) throw new Error(`Missing MCP config at ${DEFAULT_CONFIG_PATH}`);
@@ -254,11 +326,14 @@ export default function (pi: ExtensionAPI) {
     }
 
     registeredShortcutKeys.add(shortcutKey);
+    const presentation = getShortcutPresentation(serverName, sourceToolName, description);
 
     pi.registerTool({
       name: toolName,
       label: toolName,
-      description: `MCP ${serverName}:${sourceToolName}${description ? ` - ${description}` : ""}`,
+      description: presentation.description,
+      promptSnippet: presentation.promptSnippet,
+      promptGuidelines: presentation.promptGuidelines,
       parameters: Type.Object(
         {
           argumentsJson: Type.Optional(
@@ -286,6 +361,9 @@ export default function (pi: ExtensionAPI) {
           content: toToolContent(result),
           details: { mcp: { server: serverName, tool: sourceToolName }, raw: result },
         };
+      },
+      renderResult(result, options, theme) {
+        return renderExpandableResult(result, options, theme);
       },
     });
   }
@@ -351,6 +429,11 @@ export default function (pi: ExtensionAPI) {
     name: "mcp_list_tools",
     label: "MCP List Tools",
     description: "List tools exposed by an MCP server (configured in ~/.pi/agent/mcp.json).",
+    promptSnippet: "List tools exposed by a configured MCP server",
+    promptGuidelines: [
+      "Use mcp_list_tools before mcp_call when the exact MCP tool name or arguments are unknown.",
+      "Do not use mcp_list_tools for local codebase search or file edits when native tools are already available.",
+    ],
     parameters: Type.Object({
       server: Type.String({ description: "Server name from ~/.pi/agent/mcp.json" }),
     }),
@@ -367,14 +450,18 @@ export default function (pi: ExtensionAPI) {
       })));
 
       const lines = result.tools.map((tool) => {
-        const desc = tool.description ? ` - ${tool.description}` : "";
-        return `- ${tool.name}${desc}`;
+        const presentation = getShortcutPresentation(params.server, tool.name, tool.description);
+        const desc = presentation.description.replace(/^MCP [^ ]+ -\s*/, "");
+        return `- ${tool.name} - ${desc}`;
       });
 
       return {
         content: [{ type: "text", text: lines.length ? lines.join("\n") : "(no tools)" }],
         details: { toolCount: result.tools.length, tools: result.tools },
       };
+    },
+    renderResult(result, options, theme) {
+      return renderExpandableResult(result, options, theme);
     },
   });
 
@@ -383,6 +470,12 @@ export default function (pi: ExtensionAPI) {
     label: "MCP Call",
     description:
       "Call any MCP tool by name. Use mcp_list_tools first to discover tool names. Servers configured in ~/.pi/agent/mcp.json.",
+    promptSnippet: "Call a named MCP server tool with JSON arguments",
+    promptGuidelines: [
+      "Use mcp_call only for MCP server tools that do not have a direct shortcut tool registered.",
+      "Use mcp_list_tools before mcp_call when the MCP server's available tool names are unknown.",
+      "Pass mcp_call.argumentsJson as a JSON object string unless using explicit wrapper fields documented by the target MCP tool.",
+    ],
     parameters: Type.Object(
       {
         server: Type.String({ description: "Server name from ~/.pi/agent/mcp.json" }),
@@ -415,6 +508,9 @@ export default function (pi: ExtensionAPI) {
         content: toToolContent(result),
         details: { mcp: { server: params.server, tool: params.tool }, raw: result },
       };
+    },
+    renderResult(result, options, theme) {
+      return renderExpandableResult(result, options, theme);
     },
   });
 

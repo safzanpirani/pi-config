@@ -7,8 +7,10 @@ type OAuthCred = {
   type: "oauth";
   refresh?: string;
   access?: string;
+  key?: string;
   expires?: number;
   accountId?: string;
+  account_id?: string;
   [k: string]: unknown;
 };
 
@@ -24,6 +26,7 @@ type Profile = {
 type StoreV2 = {
   version: 2;
   activeProfileId?: string;
+  lastProfileId?: string;
   profiles: Profile[];
 };
 
@@ -48,10 +51,12 @@ const AUTH_FILE = path.join(AGENT_DIR, "auth.json");
 const STORE_FILE = path.join(AGENT_DIR, "codexswap.json");
 const BACKUPS_DIR = path.join(os.homedir(), ".pi", "backups");
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+const USAGE_TIMEOUT_MS = 8000;
 
 type CodexUsageWindow = {
   label: string;
   usedPercent: number;
+  limitWindowSeconds?: number;
   resetAt?: number;
 };
 
@@ -148,8 +153,72 @@ function formatRemaining(resetAt?: number): string {
   return ` (${hrs}h${rem ? `${rem}m` : ""} left)`;
 }
 
-async function fetchCodexUsageSnapshot(oauth: OAuthCred): Promise<CodexUsageSnapshot> {
-  const token = oauth.access;
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "now";
+  if (seconds >= 86_400) {
+    const d = Math.floor(seconds / 86_400);
+    const h = Math.floor((seconds % 86_400) / 3600);
+    return h > 0 ? `${d}d${h}h` : `${d}d`;
+  }
+  if (seconds >= 3600) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return m > 0 ? `${h}h${m}m` : `${h}h`;
+  }
+  return `${Math.max(1, Math.floor(seconds / 60))}m`;
+}
+
+function formatResetClock(resetAtSeconds?: number): string {
+  if (!resetAtSeconds) return "";
+  const date = new Date(resetAtSeconds * 1000);
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  const time = date
+    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  if (sameDay) return time;
+  return `${date.toLocaleDateString([], { day: "numeric", month: "short" })} ${time}`;
+}
+
+function elapsedPercent(w: CodexUsageWindow): number {
+  if (!w.resetAt || !w.limitWindowSeconds || w.limitWindowSeconds <= 0) return w.usedPercent;
+  const remaining = Math.max(0, w.resetAt - Math.floor(Date.now() / 1000));
+  return Math.max(0, Math.min(100, ((w.limitWindowSeconds - remaining) / w.limitWindowSeconds) * 100));
+}
+
+function renderUsageBar(w: CodexUsageWindow, width = 18): string {
+  const pct = Math.max(0, Math.min(100, w.usedPercent));
+  const elapsed = Math.max(0, Math.min(100, elapsedPercent(w)));
+  const fillEnd = Math.round((pct / 100) * width);
+  const cursor = Math.max(0, Math.min(width - 1, Math.round((elapsed / 100) * (width - 1))));
+  let bar = "";
+  for (let i = 0; i < width; i++) {
+    if (i === cursor) bar += "|";
+    else bar += i < fillEnd ? "━" : "─";
+  }
+  return bar;
+}
+
+function usageStatusLines(snapshot: CodexUsageSnapshot): string[] {
+  if (snapshot.error) return [`Live usage: ${snapshot.error}`];
+  if (!snapshot.windows.length) return ["Live usage: no window data"];
+
+  const header = `Live usage${snapshot.plan ? ` (${snapshot.plan})` : ""}:`;
+  const lines = snapshot.windows.map((w) => {
+    const remaining = w.resetAt ? Math.max(0, w.resetAt - Math.floor(Date.now() / 1000)) : undefined;
+    const reset = formatResetClock(w.resetAt);
+    const timing = remaining !== undefined && reset ? ` · ${formatDuration(remaining)}→${reset}` : formatRemaining(w.resetAt);
+    return `  ${w.label.padEnd(3)} ${renderUsageBar(w)} ${w.usedPercent}%${timing}`;
+  });
+  return [header, ...lines];
+}
+
+async function fetchCodexUsageSnapshot(oauth: OAuthCred, signal?: AbortSignal): Promise<CodexUsageSnapshot> {
+  const token = oauth.access ?? oauth.key;
   if (!token) return { windows: [], error: "missing access token" };
 
   const headers: Record<string, string> = {
@@ -158,19 +227,19 @@ async function fetchCodexUsageSnapshot(oauth: OAuthCred): Promise<CodexUsageSnap
     "User-Agent": "pi-codexswap",
   };
 
-  const accountId = typeof oauth.accountId === "string" ? oauth.accountId : undefined;
+  const accountId = typeof oauth.accountId === "string" ? oauth.accountId : typeof oauth.account_id === "string" ? oauth.account_id : undefined;
   if (accountId) {
     headers["ChatGPT-Account-Id"] = accountId;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = AbortSignal.timeout(USAGE_TIMEOUT_MS);
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
 
   try {
-    const res = await fetch(CODEX_USAGE_URL, { headers, signal: controller.signal });
+    const res = await fetch(CODEX_USAGE_URL, { headers, signal: combined });
 
     if (!res.ok) {
-      const msg = res.status === 401 || res.status === 403 ? "token expired" : `http ${res.status}`;
+      const msg = res.status === 401 || res.status === 403 ? "auth expired" : `HTTP ${res.status}`;
       return { windows: [], error: msg };
     }
 
@@ -191,23 +260,41 @@ async function fetchCodexUsageSnapshot(oauth: OAuthCred): Promise<CodexUsageSnap
     const windows: CodexUsageWindow[] = raw.map((w) => ({
       label: formatWindowLabel(w.limit_window_seconds),
       usedPercent: Math.max(0, Math.min(100, Math.round(w.used_percent ?? 0))),
+      limitWindowSeconds: w.limit_window_seconds,
       resetAt: w.reset_at,
     }));
 
     return { plan: json.plan_type, windows };
-  } catch {
-    return { windows: [], error: "network/timeout" };
-  } finally {
-    clearTimeout(timeout);
+  } catch (err) {
+    const msg = combined.aborted ? "timeout/aborted" : (err as Error)?.message ?? "network error";
+    return { windows: [], error: msg };
   }
 }
 
 function usageSummary(snapshot: CodexUsageSnapshot): string {
-  if (snapshot.error) return `Usage refresh: ${snapshot.error}`;
-  if (!snapshot.windows.length) return "Usage refresh: no window data";
-  const plan = snapshot.plan ? `plan=${snapshot.plan} | ` : "";
-  const pieces = snapshot.windows.map((w) => `${w.label} ${w.usedPercent}%${formatRemaining(w.resetAt)}`);
-  return `Usage now: ${plan}${pieces.join(" | ")}`;
+  return usageStatusLines(snapshot).join("\n");
+}
+
+async function usageForProfiles(profiles: Profile[]): Promise<Array<{ profile: Profile; usage: CodexUsageSnapshot }>> {
+  return Promise.all(profiles.map(async (profile) => ({ profile, usage: await fetchCodexUsageSnapshot(profile.oauth) })));
+}
+
+function primaryUsage(snapshot: CodexUsageSnapshot): number | undefined {
+  if (snapshot.error) return undefined;
+  return snapshot.windows[0]?.usedPercent;
+}
+
+function secondaryUsage(snapshot: CodexUsageSnapshot): number | undefined {
+  if (snapshot.error) return undefined;
+  return snapshot.windows[1]?.usedPercent;
+}
+
+function profileUsageLine(profile: Profile, snapshot: CodexUsageSnapshot, index?: number): string {
+  const prefix = index === undefined ? profile.label : `${index + 1}. ${profile.label}`;
+  if (snapshot.error) return `${prefix} - ${shortWho(profile)} - usage: ${snapshot.error}`;
+  if (!snapshot.windows.length) return `${prefix} - ${shortWho(profile)} - usage: no data`;
+  const usage = snapshot.windows.map((w) => `${w.label} ${w.usedPercent}%`).join(" | ");
+  return `${prefix} - ${shortWho(profile)} - ${usage}`;
 }
 
 function decodeJwtPayload(token?: string): Record<string, unknown> | null {
@@ -322,7 +409,7 @@ function loadStore(): StoreV2 {
 
   if (raw && (raw as StoreV2).version === 2 && Array.isArray((raw as StoreV2).profiles)) {
     const s = raw as StoreV2;
-    return { version: 2, activeProfileId: s.activeProfileId, profiles: s.profiles };
+    return { version: 2, activeProfileId: s.activeProfileId, lastProfileId: s.lastProfileId, profiles: s.profiles };
   }
 
   if (raw && (raw as LegacyStore).version === 1 && (raw as LegacyStore).slots) {
@@ -392,7 +479,12 @@ function helpText(): string {
   return [
     "Usage:",
     "  /codexswap                 Cycle to next saved Codex account",
+    "  /codexswap back            Switch back to previous saved account",
     "  /codexswap status          Show current + saved accounts",
+    "  /codexswap usage [all|sel]  Show live quota for active/all/one profile",
+    "  /codexswap best            Switch to saved account with lowest primary usage",
+    "  /codexswap low             Show profiles sorted by lowest live usage",
+    "  /codexswap purge [dry-run] Purge saved profiles whose auth is expired",
     "  /codexswap who             Show live account from auth.json",
     "  /codexswap add [label]     Save currently logged-in account",
     "  /codexswap use <label|#>   Switch to a saved account",
@@ -459,6 +551,7 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
         const idx = Math.max(0, store.profiles.findIndex((p) => p.id === currentId));
         const target = store.profiles[(idx + 1) % store.profiles.length];
 
+        store.lastProfileId = currentId;
         applyOpenAICodexOAuth(ctx, target.oauth);
         store.activeProfileId = target.id;
         saveStore(store);
@@ -473,22 +566,168 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
         return;
       }
 
+      if (sub === "back" || sub === "prev") {
+        const currentId = liveProfile?.id ?? store.activeProfileId;
+        const target = store.lastProfileId ? store.profiles.find((p) => p.id === store.lastProfileId) : undefined;
+        if (!target) {
+          ctx.ui.notify("No previous Codex profile recorded yet.", "warning");
+          return;
+        }
+
+        applyOpenAICodexOAuth(ctx, target.oauth);
+        store.activeProfileId = target.id;
+        store.lastProfileId = currentId;
+        saveStore(store);
+
+        const activeOauth = await refreshAndGetActiveOAuth(ctx);
+        const usage = activeOauth ? await fetchCodexUsageSnapshot(activeOauth) : { windows: [], error: "auth unavailable" };
+        ctx.ui.notify(`Switched openai-codex back → ${target.label} (${shortWho(target)}).\n${usageSummary(usage)}`, "success");
+        return;
+      }
+
       if (sub === "status" || sub === "list") {
+        const activeOauth = await refreshAndGetActiveOAuth(ctx);
+        const usage = activeOauth ? await fetchCodexUsageSnapshot(activeOauth) : { windows: [], error: "auth unavailable" };
+        const usageByProfile = await usageForProfiles(store.profiles);
         const lines = store.profiles.map((p, i) => {
           const active = p.id === store.activeProfileId ? "*" : " ";
           const liveMark = p.oauth.refresh && p.oauth.refresh === live.refresh ? "(live)" : "";
-          return `${active} ${i + 1}. ${p.label} - ${shortWho(p)} ${liveMark}`.trim();
+          const profileUsage = usageByProfile.find((u) => u.profile.id === p.id)?.usage;
+          const usageText = profileUsage
+            ? profileUsage.error
+              ? profileUsage.error
+              : profileUsage.windows.map((w) => `${w.label} ${w.usedPercent}%`).join(" | ") || "no data"
+            : "usage unknown";
+          return `${active} ${i + 1}. ${p.label} - ${shortWho(p)} - ${usageText} ${liveMark}`.trim();
         });
         saveStore(store);
         ctx.ui.notify(
           [
             `Profiles: ${store.profiles.length}`,
             `Active: ${store.profiles.find((p) => p.id === store.activeProfileId)?.label ?? "unknown"}`,
+            `Previous: ${store.profiles.find((p) => p.id === store.lastProfileId)?.label ?? "none"}`,
             "",
             lines.length ? lines.join("\n") : "(none)",
+            "",
+            usageSummary(usage),
           ].join("\n"),
           "info"
         );
+        return;
+      }
+
+      if (sub === "usage" || sub === "quota") {
+        if (rest === "all" || rest === "*") {
+          const all = await usageForProfiles(store.profiles);
+          ctx.ui.notify(all.map(({ profile, usage }, i) => profileUsageLine(profile, usage, i)).join("\n"), "info");
+          return;
+        }
+
+        if (rest) {
+          const target = resolveProfile(store.profiles, rest);
+          if (!target) {
+            ctx.ui.notify(`Profile not found: ${rest}`, "error");
+            return;
+          }
+          const usage = await fetchCodexUsageSnapshot(target.oauth);
+          ctx.ui.notify([profileUsageLine(target, usage), "", usageSummary(usage)].join("\n"), "info");
+          return;
+        }
+
+        const activeOauth = await refreshAndGetActiveOAuth(ctx);
+        const usage = activeOauth ? await fetchCodexUsageSnapshot(activeOauth) : { windows: [], error: "auth unavailable" };
+        ctx.ui.notify(usageSummary(usage), "info");
+        return;
+      }
+
+      if (sub === "best" || sub === "least-used") {
+        if (store.profiles.length === 0) {
+          ctx.ui.notify("No saved Codex profiles.", "warning");
+          return;
+        }
+
+        const all = await usageForProfiles(store.profiles);
+        const usable = all
+          .map((entry) => ({ ...entry, primary: primaryUsage(entry.usage) }))
+          .filter((entry): entry is { profile: Profile; usage: CodexUsageSnapshot; primary: number } => typeof entry.primary === "number")
+          .sort((a, b) => a.primary - b.primary);
+
+        const best = usable[0];
+        if (!best) {
+          ctx.ui.notify(`Could not compare usage:\n${all.map(({ profile, usage }, i) => profileUsageLine(profile, usage, i)).join("\n")}`, "error");
+          return;
+        }
+
+        const currentId = liveProfile?.id ?? store.activeProfileId;
+        if (currentId && currentId !== best.profile.id) store.lastProfileId = currentId;
+        applyOpenAICodexOAuth(ctx, best.profile.oauth);
+        store.activeProfileId = best.profile.id;
+        saveStore(store);
+        ctx.ui.notify(
+          [`Switched openai-codex → ${best.profile.label} (${shortWho(best.profile)}) - lowest primary usage.`, usageSummary(best.usage)].join("\n"),
+          "success"
+        );
+        return;
+      }
+
+      if (sub === "low" || sub === "lowest" || sub === "sort") {
+        if (store.profiles.length === 0) {
+          ctx.ui.notify("No saved Codex profiles.", "warning");
+          return;
+        }
+
+        const all = await usageForProfiles(store.profiles);
+        const sorted = all
+          .map((entry) => ({ ...entry, primary: primaryUsage(entry.usage), secondary: secondaryUsage(entry.usage) }))
+          .sort((a, b) => {
+            const ap = a.primary ?? Number.POSITIVE_INFINITY;
+            const bp = b.primary ?? Number.POSITIVE_INFINITY;
+            if (ap !== bp) return ap - bp;
+            const as = a.secondary ?? Number.POSITIVE_INFINITY;
+            const bs = b.secondary ?? Number.POSITIVE_INFINITY;
+            if (as !== bs) return as - bs;
+            return a.profile.label.localeCompare(b.profile.label);
+          });
+
+        const lines = sorted.map(({ profile, usage, primary }, i) => {
+          const marker = profile.id === store.activeProfileId ? "*" : " ";
+          const rank = primary === undefined ? "--" : String(i + 1).padStart(2, " ");
+          return `${marker} ${rank}. ${profileUsageLine(profile, usage)}`;
+        });
+
+        ctx.ui.notify(["Lowest live Codex usage:", ...lines].join("\n"), "info");
+        return;
+      }
+
+      if (sub === "purge" || sub === "prune") {
+        const dryRun = rest === "dry-run" || rest === "dry" || rest === "--dry-run" || rest === "check";
+        const all = await usageForProfiles(store.profiles);
+        const expired = all.filter(({ usage }) => usage.error === "auth expired").map(({ profile }) => profile);
+
+        if (expired.length === 0) {
+          ctx.ui.notify("No expired Codex profiles found.", "success");
+          return;
+        }
+
+        const expiredIds = new Set(expired.map((p) => p.id));
+        const lines = expired.map((p) => `- ${p.label} (${shortWho(p)})`);
+
+        if (dryRun) {
+          ctx.ui.notify([`Would purge ${expired.length} expired profile(s):`, ...lines].join("\n"), "info");
+          return;
+        }
+
+        store.profiles = store.profiles.filter((p) => !expiredIds.has(p.id));
+        if (store.activeProfileId && expiredIds.has(store.activeProfileId)) {
+          const liveAfterPurge = findByRefresh(store.profiles, live.refresh);
+          store.activeProfileId = liveAfterPurge?.id ?? store.profiles[0]?.id;
+        }
+        if (store.lastProfileId && expiredIds.has(store.lastProfileId)) {
+          store.lastProfileId = undefined;
+        }
+        saveStore(store);
+
+        ctx.ui.notify([`Purged ${expired.length} expired profile(s):`, ...lines].join("\n"), "success");
         return;
       }
 
@@ -533,6 +772,7 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
         }
 
         applyOpenAICodexOAuth(ctx, target.oauth);
+        if (store.activeProfileId && store.activeProfileId !== target.id) store.lastProfileId = store.activeProfileId;
         store.activeProfileId = target.id;
         saveStore(store);
 
@@ -552,6 +792,9 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
         store.profiles = store.profiles.filter((p) => p.id !== target.id);
         if (store.activeProfileId === target.id) {
           store.activeProfileId = store.profiles[0]?.id;
+        }
+        if (store.lastProfileId === target.id) {
+          store.lastProfileId = undefined;
         }
         saveStore(store);
         ctx.ui.notify(`Removed profile: ${target.label}`, "success");

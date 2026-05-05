@@ -4,17 +4,43 @@
  * Connects directly to Exa's remote MCP endpoint via Streamable HTTP.
  * Same approach as opencode's remote MCP config.
  *
- * URL: https://mcp.exa.ai/mcp?tools=...
+ * Setup: set EXA_API_KEY in the environment, or write
+ * `~/.pi/agent/extensions/exa-remote.json` with `{ "apiKey": "..." }`.
+ * URL pattern: https://mcp.exa.ai/mcp?exaApiKey=<key>&tools=...
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { keyHint, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
+
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 
-const EXA_MCP_URL = "https://mcp.exa.ai/mcp?tools=web_search_exa,research_paper_search_exa,news_search_exa,company_search_exa,crawling_exa,get_page_contents_exa";
+const EXA_TOOL_LIST = "web_search_exa,crawling_exa";
+
+function loadExaApiKey(): string | undefined {
+  const fromEnv = process.env.EXA_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+  const configPath = join(homedir(), ".pi/agent/extensions/exa-remote.json");
+  if (!existsSync(configPath)) return undefined;
+  try {
+    const raw = JSON.parse(readFileSync(configPath, "utf8")) as { apiKey?: string };
+    return raw.apiKey?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildExaUrl(): string | undefined {
+  const key = loadExaApiKey();
+  if (!key) return undefined;
+  return `https://mcp.exa.ai/mcp?exaApiKey=${encodeURIComponent(key)}&tools=${EXA_TOOL_LIST}`;
+}
 
 const EXA_TOOLS = [
   {
@@ -22,24 +48,8 @@ const EXA_TOOLS = [
     description: "Search the web for any topic and get clean, ready-to-use content.",
   },
   {
-    name: "research_paper_search_exa",
-    description: "Search for research papers and scholarly content.",
-  },
-  {
-    name: "news_search_exa",
-    description: "Search recent news articles.",
-  },
-  {
-    name: "company_search_exa",
-    description: "Search for company information.",
-  },
-  {
     name: "crawling_exa",
-    description: "Get the full content of a specific webpage.",
-  },
-  {
-    name: "get_page_contents_exa",
-    description: "Get page contents from a specific webpage.",
+    description: "Get the full content of a specific webpage. Pass {\"urls\": [\"https://...\"]} as arguments.",
   },
 ] as const;
 
@@ -58,7 +68,13 @@ async function getExaClient(): Promise<Client> {
 
   connecting = true;
   try {
-    const transport = new StreamableHTTPClientTransport(new URL(EXA_MCP_URL));
+    const url = buildExaUrl();
+    if (!url) {
+      throw new Error(
+        "Exa API key missing. Set EXA_API_KEY env var or write ~/.pi/agent/extensions/exa-remote.json with { \"apiKey\": \"...\" }.",
+      );
+    }
+    const transport = new StreamableHTTPClientTransport(new URL(url));
     const client = new Client(
       { name: "pi-exa-remote", version: "1.0.0" },
       { capabilities: {} }
@@ -67,7 +83,6 @@ async function getExaClient(): Promise<Client> {
     await client.connect(transport);
     exaClient = client;
     exaTransport = transport;
-    console.log("[exa-remote] Connected to Exa MCP via Streamable HTTP");
     return client;
   } finally {
     connecting = false;
@@ -100,6 +115,47 @@ function toToolContent(result: { content?: Array<any> }) {
   return content.length ? content : [{ type: "text", text: "(empty result)" }];
 }
 
+function resultText(result: { content?: Array<any> }): string {
+  return (result.content ?? [])
+    .map((item) => item?.type === "text" ? String(item.text ?? "") : JSON.stringify(item))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function compactToolText(text: string, maxLines = 8, maxChars = 1800): { preview: string; lineCount: number; truncated: boolean } {
+  const lines = text.split("\n");
+  const joined = lines.slice(0, maxLines).join("\n");
+  const preview = joined.length > maxChars ? `${joined.slice(0, maxChars - 1)}…` : joined;
+  return {
+    preview,
+    lineCount: lines.length,
+    truncated: lines.length > maxLines || joined.length > maxChars,
+  };
+}
+
+function renderExpandableResult(result: any, options: { expanded: boolean; isPartial?: boolean }, theme: any) {
+  if (options.isPartial) return new Text(theme.fg("warning", "Running Exa request..."), 0, 0);
+
+  const text = resultText(result) || "(empty result)";
+  const { preview, lineCount, truncated } = compactToolText(text);
+  const raw = result?.details?.raw;
+  const itemCount = Array.isArray(raw?.content) ? raw.content.length : undefined;
+
+  let output = theme.fg(result?.isError ? "error" : "success", result?.isError ? "Exa error" : "Exa result");
+  output += theme.fg("dim", ` (${lineCount} line${lineCount === 1 ? "" : "s"}${itemCount !== undefined ? `, ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""})`);
+
+  if (!options.expanded) {
+    output += ` ${theme.fg("muted", keyHint("app.tools.expand", "to expand"))}`;
+    if (preview.trim()) output += `\n${theme.fg("dim", preview)}`;
+    if (truncated) output += `\n${theme.fg("muted", "… output compacted")}`;
+    return new Text(output, 0, 0);
+  }
+
+  output += ` ${theme.fg("muted", keyHint("app.tools.expand", "to collapse"))}`;
+  output += `\n${text}`;
+  return new Text(output, 0, 0);
+}
+
 async function callExaTool(toolName: string, rawArgumentsJson: unknown) {
   const client = await getExaClient();
   const args = parseArgumentsJson(rawArgumentsJson);
@@ -118,32 +174,6 @@ async function callExaTool(toolName: string, rawArgumentsJson: unknown) {
 }
 
 export default function(pi: ExtensionAPI) {
-  pi.registerTool({
-    name: "exa_call",
-    label: "Exa Call",
-    description: "Call any Exa MCP tool. Tools: web_search_exa, research_paper_search_exa, news_search_exa, company_search_exa, crawling_exa, get_page_contents_exa",
-    parameters: Type.Object({
-      tool: Type.String({ description: "Tool name (e.g., web_search_exa)" }),
-      argumentsJson: Type.Optional(
-        Type.String({
-          description: 'Tool arguments as JSON (e.g., {"query":"...", "numResults": 5})',
-        })
-      ),
-    }),
-    async execute(_toolCallId, params) {
-      try {
-        return await callExaTool(params.tool, (params as Record<string, unknown>).argumentsJson);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        return {
-          content: [{ type: "text", text: `Exa error: ${msg}` }],
-          details: {},
-          isError: true,
-        };
-      }
-    },
-  });
-
   for (const tool of EXA_TOOLS) {
     pi.registerTool({
       name: tool.name,
@@ -167,6 +197,9 @@ export default function(pi: ExtensionAPI) {
             isError: true,
           };
         }
+      },
+      renderResult(result, options, theme) {
+        return renderExpandableResult(result, options, theme);
       },
     });
   }

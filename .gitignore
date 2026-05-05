@@ -1,9 +1,12 @@
 # Local state
 sessions/
+subagents/
+cache/
+pi-fff/
+
+# Binary tools / package installs
 git/
 bin/
-
-# Node modules
 node_modules/
 
 # Secrets and machine-local runtime files
@@ -12,8 +15,15 @@ antigravity-accounts.json
 codexswap.json
 codex-fast.json
 mcp-tools-cache.json
+pi-crash.log
 *.bak
 *.bak-*
+auth.json.*.bak
+codexswap.json.*.bak
+settings.json.bak
+
+# Secret-bearing extension config (real apiKey lives in private repo)
+extensions/exa-remote.json
 
 # OS files
 .DS_Store

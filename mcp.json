@@ -2,7 +2,10 @@
   "servers": {
     "morph-mcp": {
       "command": "npx",
-      "args": ["-y", "@morphllm/morphmcp"],
+      "args": [
+        "-y",
+        "@morphllm/morphmcp"
+      ],
       "env": {
         "MORPH_API_KEY": "YOUR_MORPH_API_KEY"
       }
