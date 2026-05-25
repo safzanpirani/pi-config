@@ -1,76 +1,47 @@
 # Live State Report
 
 Snapshot source: `~/.pi/agent` on the current MacBook
-Snapshot date: **2026-05-06**
+Snapshot date: **2026-05-25**
 
 ## High-level state
 
-- default provider: `opencode-go`
-- default model: `deepseek-v4-pro`
-- thinking level: `high`
-- compaction: `enabled`
+- default provider: `openai-codex`
+- default model: `gpt-5.5`
+- thinking level: `xhigh`
+- compaction: enabled
 - transport: `websocket-cached`
 - steering / follow-up mode: `all`
-- pi version: `0.72.1`
+- last changelog version in settings: `0.75.4`
 
 ## Live config inventory
 
-### Packages enabled
+- enabled model patterns: 36
+- configured packages: 13
+- custom extension files in this public snapshot: 24
+- prompt templates in this public snapshot: 8
+- local Agent Skills in this public snapshot: 85
 
-- `git:github.com/aliou/pi-extensions`
-- `git:github.com/tmustier/pi-extensions`
-- `git:github.com/prateekmedia/pi-hooks`
-- `npm:pi-web-access`
-- `npm:shitty-extensions`
-- `git:github.com/pasky/chrome-cdp-skill@v1.0.1`
-- `npm:pi-cursor-agent`
-- `npm:pi-subagents`
-- `git:github.com/prateekmedia/claude-agent-sdk-pi`
-- `npm:pi-autoresearch`
-- `npm:@aliou/pi-processes`
-- `npm:pi-markdown-preview`
-- `git:github.com/injaneity/pi-computer-use@v0.2.1`
-- `-git:github.com/ShpetimA/pi-fff` (disabled)
+## Safe files mirrored publicly
 
-### Live auth providers present
-
-- `agentrouter`
-- `anthropic`
-- `cursor-agent`
-- `fireworks`
-- `github-copilot`
-- `google-antigravity`
-- `llamacpp`
-- `oc`
-- `openai-codex`
-- `opencode-zen`
-- `openrouter`
-- `safzan-proxy`
-
-### Runtime state counts
-
-- Antigravity accounts: `8`
-- Codex profiles: `15`
-- Codex fast mode: `off`
-
-## Safe files mirrored here from the live machine
-
-- `settings.json` (Mac paths preserved; setup.ps1 rewrites for Windows)
-- `models.json` with hardcoded keys swapped for env-var name placeholders
-- `mcp.json` with placeholder `YOUR_MORPH_API_KEY`
-- `auth.example.json` regenerated to match the current 12-provider shape
-- All custom extensions in `extensions/` (see README for the full list)
+- `settings.json` with live resource/package configuration
+- `models.json` with real key material replaced by env-var names/placeholders
+- `mcp.json` with placeholder MCP env values
+- `auth.example.json` regenerated from private `auth.json` shape
+- `extensions/` source and package manifests, excluding secret config
+- `prompts/` prompt templates
+- `skills/` dereferenced local Agent Skill snapshot, excluding caches/session notes
+- setup scripts for macOS/Linux and Windows
 
 ## Intentionally not mirrored publicly
 
 - `auth.json`
-- `mcp.json` real `MORPH_API_KEY` value
-- `extensions/exa-remote.json` (real Exa key)
-- runtime state: `antigravity-accounts.json`, `codexswap.json`, `codex-fast.json`
-- `models.json` real `apiKey` values for `digitalocean`, `baseten`, `novita`
-- `sessions/`, `subagents/`, `cache/`, `pi-fff/`, `git/`, `node_modules/`
-- backup files, crash logs
+- `.env.pi`, `.env.pi.json`
+- `mcp.json` real MCP values
+- `extensions/exa-remote.json`
+- runtime account state: `antigravity-accounts.json`, `codexswap.json`, `codex-fast.json`
+- `sessions/`, `subagents/`, `cache/`, `pi-fff/`, `git/`, `npm/`, `node_modules/`
+- backup files, crash logs, helper binaries
 
 ## Public repo goal
 
-A clean, publishable mirror: explains the setup, exposes safe extension code, only placeholders for anything secret.
+A clean, publishable mirror that exposes reusable Pi configuration, extensions, prompts, and skills while keeping every real secret in `pi-config-private` only.

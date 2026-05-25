@@ -7,9 +7,13 @@ pi-fff/
 # Binary tools / package installs
 git/
 bin/
+npm/
+helpers/
 node_modules/
 
 # Secrets and machine-local runtime files
+.env*
+*.env
 auth.json
 antigravity-accounts.json
 codexswap.json
@@ -24,6 +28,13 @@ settings.json.bak
 
 # Secret-bearing extension config (real apiKey lives in private repo)
 extensions/exa-remote.json
+prompts/torrents.md
+skills/torrents/
+
+# Skill/runtime caches
+skills/**/.cache/
+__pycache__/
+*.pyc
 
 # OS files
 .DS_Store

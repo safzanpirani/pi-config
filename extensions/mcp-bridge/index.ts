@@ -199,6 +199,10 @@ export default function (pi: ExtensionAPI) {
     return normalized;
   }
 
+  function isInterruptibleMcpSearchTool(serverName: string, toolName: string): boolean {
+    return serverName === "morph-mcp" && (toolName === "codebase_search" || toolName === "github_codebase_search");
+  }
+
   function toToolContent(result: { content?: Array<any> }) {
     const content: Array<any> = [];
     for (const item of result.content ?? []) {
@@ -303,7 +307,7 @@ export default function (pi: ExtensionAPI) {
       if (ctx?.hasUI) ctx.ui.notify(`MCP(${serverName}) error: ${err.message}`, "error");
     };
 
-    await client.connect(transport);
+    await client.connect(transport, signal ? { signal } : undefined);
     clients.set(serverName, { client, transport });
     return client;
   }
@@ -345,7 +349,8 @@ export default function (pi: ExtensionAPI) {
         { additionalProperties: true }
       ),
       async execute(_toolCallId, params: any, signal, _onUpdate, ctx) {
-        const client = await getClient(serverName, ctx, signal);
+        const requestSignal = isInterruptibleMcpSearchTool(serverName, sourceToolName) ? signal : undefined;
+        const client = await getClient(serverName, ctx, requestSignal);
         const args = normalizeKnownArgs(
           serverName,
           sourceToolName,
@@ -354,7 +359,8 @@ export default function (pi: ExtensionAPI) {
         );
         const result = await client.request(
           { method: "tools/call", params: { name: sourceToolName, arguments: args } },
-          CallToolResultSchema
+          CallToolResultSchema,
+          requestSignal ? { signal: requestSignal } : undefined
         );
 
         return {
@@ -437,8 +443,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       server: Type.String({ description: "Server name from ~/.pi/agent/mcp.json" }),
     }),
-    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      const client = await getClient(params.server, ctx, signal);
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const client = await getClient(params.server, ctx);
       const result = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
 
       for (const tool of result.tools) {
@@ -489,7 +495,8 @@ export default function (pi: ExtensionAPI) {
       { additionalProperties: true }
     ),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      const client = await getClient(params.server, ctx, signal);
+      const requestSignal = isInterruptibleMcpSearchTool(params.server, params.tool) ? signal : undefined;
+      const client = await getClient(params.server, ctx, requestSignal);
       const args = normalizeKnownArgs(
         params.server,
         params.tool,
@@ -501,7 +508,8 @@ export default function (pi: ExtensionAPI) {
           method: "tools/call",
           params: { name: params.tool, arguments: args },
         },
-        CallToolResultSchema
+        CallToolResultSchema,
+        requestSignal ? { signal: requestSignal } : undefined
       );
 
       return {

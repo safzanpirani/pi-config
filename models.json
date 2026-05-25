@@ -92,9 +92,89 @@
         }
       ]
     },
-    "agentrouter": {
+    "agentrouter-openai": {
       "baseUrl": "https://agentrouter.org/v1",
       "api": "openai-completions",
+      "apiKey": "AGENTROUTER_API_KEY",
+      "authHeader": true,
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash (Agent Router)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "thinkingFormat": "deepseek",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "supportsStrictMode": false,
+            "reasoningEffortMap": {
+              "minimal": "high",
+              "low": "high",
+              "medium": "high",
+              "high": "high",
+              "xhigh": "max"
+            }
+          }
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro (Agent Router)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "thinkingFormat": "deepseek",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "supportsStrictMode": false,
+            "reasoningEffortMap": {
+              "minimal": "high",
+              "low": "high",
+              "medium": "high",
+              "high": "high",
+              "xhigh": "max"
+            }
+          }
+        },
+        {
+          "id": "glm-5.1",
+          "name": "GLM 5.1 (Agent Router)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 200000,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        }
+      ]
+    },
+    "agentrouter-claude": {
+      "baseUrl": "https://agentrouter.org/v1",
+      "api": "anthropic-messages",
       "apiKey": "AGENTROUTER_API_KEY",
       "authHeader": true,
       "models": [
@@ -114,18 +194,10 @@
             "cacheRead": 0,
             "cacheWrite": 0
           }
-        }
-      ]
-    },
-    "safzan-proxy": {
-      "baseUrl": "http://127.0.0.1:8317/v1",
-      "api": "openai-completions",
-      "apiKey": "SAFZAN_PROXY_API_KEY",
-      "authHeader": true,
-      "models": [
+        },
         {
-          "id": "claude-opus-4-6",
-          "name": "Claude Opus 4.6 (via VibeProxy)",
+          "id": "claude-haiku-4-5-20251001",
+          "name": "Claude Haiku 4.5 (Agent Router)",
           "reasoning": true,
           "input": [
             "text",
@@ -137,6 +209,201 @@
             "input": 0,
             "output": 0,
             "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        }
+      ]
+    },
+    "freemodel": {
+      "baseUrl": "https://api.freemodel.dev",
+      "api": "openai-responses",
+      "apiKey": "FREEMODEL_API_KEY",
+      "authHeader": true,
+      "models": [
+        {
+          "id": "gpt-5.5",
+          "name": "GPT 5.5 (freemodel)",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "xhigh": "xhigh"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "cost": {
+            "input": 5,
+            "output": 30,
+            "cacheRead": 0.5,
+            "cacheWrite": 0
+          }
+        }
+      ]
+    },
+    "freemodel-claude": {
+      "baseUrl": "https://cc.freemodel.dev",
+      "api": "anthropic-messages",
+      "apiKey": "FREEMODEL_CLAUDE_API_KEY",
+      "authHeader": true,
+      "models": [
+        {
+          "id": "claude-opus-4-7",
+          "name": "Claude Opus 4.7 (freemodel)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 5,
+            "output": 25,
+            "cacheRead": 0.5,
+            "cacheWrite": 6.25
+          }
+        },
+        {
+          "id": "claude-sonnet-4-6",
+          "name": "Claude Sonnet 4.6 (freemodel)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 3,
+            "output": 15,
+            "cacheRead": 0.3,
+            "cacheWrite": 3.75
+          }
+        },
+        {
+          "id": "claude-opus-4-6",
+          "name": "Claude Opus 4.6 (freemodel)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 5,
+            "output": 25,
+            "cacheRead": 0.5,
+            "cacheWrite": 6.25
+          }
+        },
+        {
+          "id": "claude-haiku-4-5-20251001",
+          "name": "Claude Haiku 4.5 (freemodel)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 200000,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 1,
+            "output": 5,
+            "cacheRead": 0.1,
+            "cacheWrite": 1.25
+          }
+        }
+      ]
+    },
+    "codex-auth-broker": {
+      "baseUrl": "http://127.0.0.1:8317/v1",
+      "api": "openai-responses",
+      "apiKey": "CODEX_AUTH_BROKER_API_KEY",
+      "authHeader": true,
+      "compat": {
+        "supportsLongCacheRetention": false
+      },
+      "models": [
+        {
+          "id": "gpt-5.5",
+          "name": "GPT 5.5 (Codex Auth Broker)",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "xhigh": "xhigh"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "cost": {
+            "input": 5,
+            "output": 30,
+            "cacheRead": 0.5,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "gpt-5.4",
+          "name": "GPT 5.4 (Codex Auth Broker)",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "xhigh": "xhigh"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "cost": {
+            "input": 2.5,
+            "output": 15,
+            "cacheRead": 0.25,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "gpt-5.4-mini",
+          "name": "GPT 5.4 Mini (Codex Auth Broker)",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "xhigh": "xhigh"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "cost": {
+            "input": 0.75,
+            "output": 4.5,
+            "cacheRead": 0.075,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "gpt-5.3-codex",
+          "name": "GPT 5.3 Codex (Codex Auth Broker)",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "xhigh": "xhigh"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "cost": {
+            "input": 1.75,
+            "output": 14,
+            "cacheRead": 0.175,
             "cacheWrite": 0
           }
         }
@@ -1151,6 +1418,56 @@
           "maxTokens": 32768
         },
         {
+          "id": "qwen3.6-35b-a3b-uncensored-heretic-native-mtp-preserved",
+          "name": "Qwen3.6 35B A3B Heretic MTP \u2014 Thinking (LM Studio)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "qwen3.6-35b-a3b-uncensored-heretic-native-mtp-preserved-nothink",
+          "name": "Qwen3.6 35B A3B Heretic MTP \u2014 NoThink (LM Studio)",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 32768
+        },
+        {
+          "id": "qwen3.6-27b-uncensored-heretic-v2-native-mtp-preserved",
+          "name": "Qwen3.6 27B Heretic v2 MTP \u2014 Thinking (LM Studio)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "qwen3.6-27b-uncensored-heretic-v2-native-mtp-preserved-nothink",
+          "name": "Qwen3.6 27B Heretic v2 MTP \u2014 NoThink (LM Studio)",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 32768
+        },
+        {
           "id": "lmstudio-community/qwen3.5-4b"
         },
         {
@@ -1173,7 +1490,7 @@
       "apiKey": "BASETEN_API_KEY",
       "authHeader": true,
       "compat": {
-        "maxTokensField": "max_tokens"
+        "maxTokensField": "BASETEN_SECRET"
       },
       "models": [
         {
@@ -1248,7 +1565,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens"
+        "maxTokensField": "NOVITA_SECRET"
       },
       "models": [
         {
@@ -1278,7 +1595,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens"
+        "maxTokensField": "OPENCODE_SECRET"
       },
       "models": [
         {
@@ -1994,7 +2311,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens"
+        "maxTokensField": "OPENCODE_GO_SECRET"
       },
       "models": [
         {
@@ -2265,12 +2582,174 @@
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens"
+        "maxTokensField": "NAHCROF_SECRET"
       },
       "models": [
         {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "cost": {
+            "input": 0.4,
+            "output": 0.85,
+            "cacheRead": 0.003,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "deepseek-v4-pro-precision",
+          "name": "DeepSeek V4 Pro Precision \u2014 2\u00d7 req (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "cost": {
+            "input": 1.25,
+            "output": 2.5,
+            "cacheRead": 0.1,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash \u2014 0.75\u00d7 req (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "cost": {
+            "input": 0.12,
+            "output": 0.21,
+            "cacheRead": 0.02,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "deepseek-v3.2",
+          "name": "DeepSeek V3.2 (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 163840,
+          "maxTokens": 163840,
+          "cost": {
+            "input": 0.28,
+            "output": 0.38,
+            "cacheRead": 0.06,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "mimo-v2.5-pro",
+          "name": "MiMo V2.5 Pro (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "cost": {
+            "input": 0.5,
+            "output": 1.5,
+            "cacheRead": 0.1,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "mimo-v2.5-pro-precision",
+          "name": "MiMo V2.5 Pro Precision \u2014 2\u00d7 req (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "cost": {
+            "input": 0.8,
+            "output": 2.5,
+            "cacheRead": 0.16,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "glm-5.1",
+          "name": "GLM 5.1 (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 202752,
+          "maxTokens": 202752,
+          "cost": {
+            "input": 0.45,
+            "output": 2.1,
+            "cacheRead": 0.09,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "glm-5.1-precision",
+          "name": "GLM 5.1 Precision \u2014 2\u00d7 req beta (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 202752,
+          "maxTokens": 202752,
+          "cost": {
+            "input": 0.75,
+            "output": 2.9,
+            "cacheRead": 0.15,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "greg",
+          "name": "Greg \u2014 0.5\u00d7 req (Crof)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 229376,
+          "maxTokens": 229376,
+          "cost": {
+            "input": 0.1,
+            "output": 0.2,
+            "cacheRead": 0.02,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "kimi-k2.6",
+          "name": "Kimi K2.6 (Crof)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "cost": {
+            "input": 0.5,
+            "output": 1.99,
+            "cacheRead": 0.1,
+            "cacheWrite": 0
+          }
+        },
+        {
           "id": "kimi-k2.6-precision",
-          "name": "Kimi K2.6 Precision (Nahcrof)",
+          "name": "Kimi K2.6 Precision \u2014 2\u00d7 req (Crof)",
           "reasoning": true,
           "input": [
             "text",
@@ -2282,6 +2761,172 @@
             "input": 0.55,
             "output": 2.7,
             "cacheRead": 0.11,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "kimi-k2.5",
+          "name": "Kimi K2.5 (Crof)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "cost": {
+            "input": 0.35,
+            "output": 1.7,
+            "cacheRead": 0.07,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "kimi-k2.5-lightning",
+          "name": "Kimi K2.5 Lightning \u2014 beta (Crof)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 1.0,
+            "output": 3.0,
+            "cacheRead": 0.2,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "glm-5",
+          "name": "GLM 5 (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 202752,
+          "maxTokens": 202752,
+          "cost": {
+            "input": 0.48,
+            "output": 1.9,
+            "cacheRead": 0.1,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "glm-4.7",
+          "name": "GLM 4.7 (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 202752,
+          "maxTokens": 202752,
+          "cost": {
+            "input": 0.25,
+            "output": 1.1,
+            "cacheRead": 0.05,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "glm-4.7-flash",
+          "name": "GLM 4.7 Flash \u2014 0.5\u00d7 req (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 202752,
+          "maxTokens": 131072,
+          "cost": {
+            "input": 0.04,
+            "output": 0.3,
+            "cacheRead": 0.008,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "gemma-4-31b-it",
+          "name": "Gemma 4 31B IT (Crof)",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "cost": {
+            "input": 0.1,
+            "output": 0.3,
+            "cacheRead": 0.02,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "minimax-m2.5",
+          "name": "MiniMax M2.5 \u2014 0.75\u00d7 req (Crof)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 204800,
+          "maxTokens": 131072,
+          "cost": {
+            "input": 0.11,
+            "output": 0.95,
+            "cacheRead": 0.02,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "qwen3.6-27b",
+          "name": "Qwen 3.6 27B (Crof)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "cost": {
+            "input": 0.2,
+            "output": 1.5,
+            "cacheRead": 0.04,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "qwen3.5-397b-a17b",
+          "name": "Qwen 3.5 397B A17B (Crof)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "cost": {
+            "input": 0.35,
+            "output": 1.75,
+            "cacheRead": 0.07,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "qwen3.5-9b",
+          "name": "Qwen 3.5 9B \u2014 0.5\u00d7 req (Crof)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "cost": {
+            "input": 0.04,
+            "output": 0.15,
+            "cacheRead": 0.008,
             "cacheWrite": 0
           }
         }

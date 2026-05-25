@@ -1,62 +1,62 @@
 {
   "openrouter": {
     "type": "api_key",
-    "key": "..."
+    "key": "YOUR_KEY"
   },
   "safzan-proxy": {
     "type": "api_key",
-    "key": "..."
+    "key": "YOUR_KEY"
   },
   "google-antigravity": {
     "type": "oauth",
-    "refresh": "...",
-    "access": "...",
-    "expires": 1234567890000,
-    "projectId": "your-project-id"
+    "refresh": "YOUR_REFRESH",
+    "access": "YOUR_ACCESS",
+    "expires": 1777247732252,
+    "projectId": "YOUR_PROJECTID"
   },
   "opencode-zen": {
     "type": "api_key",
-    "key": "..."
+    "key": "YOUR_KEY"
   },
   "oc": {
     "type": "api_key",
-    "key": "..."
+    "key": "YOUR_KEY"
   },
   "llamacpp": {
     "type": "api_key",
-    "key": "..."
+    "key": "YOUR_KEY"
   },
   "openai-codex": {
     "type": "oauth",
-    "access": "...",
-    "refresh": "...",
-    "expires": 1234567890000,
-    "accountId": "your-account-id"
+    "access": "YOUR_ACCESS",
+    "refresh": "YOUR_REFRESH",
+    "expires": 1780579804243,
+    "accountId": "YOUR_ACCOUNTID"
   },
   "agentrouter": {
     "type": "api_key",
-    "key": "..."
+    "key": "YOUR_KEY"
   },
   "anthropic": {
     "type": "oauth",
-    "refresh": "...",
-    "access": "...",
-    "expires": 1234567890000
+    "refresh": "YOUR_REFRESH",
+    "access": "YOUR_ACCESS",
+    "expires": 1773268789368
   },
   "fireworks": {
     "type": "api-key",
-    "apiKey": "..."
+    "apiKey": "YOUR_APIKEY"
   },
   "cursor-agent": {
     "type": "oauth",
-    "access": "...",
-    "refresh": "...",
-    "expires": 1234567890000
+    "access": "YOUR_ACCESS",
+    "refresh": "YOUR_REFRESH",
+    "expires": 1780650702000
   },
   "github-copilot": {
     "type": "oauth",
-    "refresh": "...",
-    "access": "...",
-    "expires": 1234567890000
+    "refresh": "YOUR_REFRESH",
+    "access": "YOUR_ACCESS",
+    "expires": 1778046446000
   }
 }

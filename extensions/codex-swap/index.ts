@@ -172,16 +172,15 @@ function formatResetClock(resetAtSeconds?: number): string {
   if (!resetAtSeconds) return "";
   const date = new Date(resetAtSeconds * 1000);
   const now = new Date();
-  const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
   const time = date
     .toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })
     .toLowerCase()
     .replace(/\s+/g, "");
-  if (sameDay) return time;
-  return `${date.toLocaleDateString([], { day: "numeric", month: "short" })} ${time}`;
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const dateStr = sameYear
+    ? date.toLocaleDateString([], { day: "numeric", month: "short" })
+    : date.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+  return `${dateStr} ${time}`;
 }
 
 function elapsedPercent(w: CodexUsageWindow): number {
@@ -478,18 +477,24 @@ function shortWho(profile: Profile): string {
 function helpText(): string {
   return [
     "Usage:",
-    "  /codexswap                 Cycle to next saved Codex account",
-    "  /codexswap back            Switch back to previous saved account",
-    "  /codexswap status          Show current + saved accounts",
-    "  /codexswap usage [all|sel]  Show live quota for active/all/one profile",
-    "  /codexswap best            Switch to saved account with lowest primary usage",
-    "  /codexswap low             Show profiles sorted by lowest live usage",
-    "  /codexswap purge [dry-run] Purge saved profiles whose auth is expired",
-    "  /codexswap who             Show live account from auth.json",
-    "  /codexswap add [label]     Save currently logged-in account",
-    "  /codexswap use <label|#>   Switch to a saved account",
-    "  /codexswap rm <label|#>    Remove a saved account",
-    "  /codexswap rename <sel> <new-label>",
+    "  /codexswap                       Cycle to next saved Codex account",
+    "  /codexswap help                  Show this help",
+    "  /codexswap next | toggle         Cycle to next saved account",
+    "  /codexswap back | prev           Switch back to previous saved account",
+    "  /codexswap status | list         Show profiles + usage + reset time/date + token expiry",
+    "  /codexswap usage [all|sel]       Show live quota for active/all/one profile (alias: quota)",
+    "  /codexswap best | least-used     Switch to saved account with lowest primary usage",
+    "  /codexswap low | lowest | sort   Show profiles sorted by lowest live usage",
+    "  /codexswap purge [dry-run]       Purge saved profiles whose auth is expired (alias: prune)",
+    "  /codexswap who                   Show live account from auth.json",
+    "  /codexswap add [label]           Save currently logged-in account (alias: save)",
+    "  /codexswap use <label|#>         Switch to a saved account",
+    "  /codexswap current | previous    Switch to the saved profile matching that label",
+    "  /codexswap rm <label|#>          Remove a saved account (alias: remove)",
+    "  /codexswap rename <sel> <new>    Rename a saved profile",
+    "",
+    "Companion command:",
+    "  /codexwho                        Show the currently active OpenAI Codex account",
     "",
     "Flow to add a 3rd account:",
     "  1) /login openai-codex (sign into new account)",
@@ -525,16 +530,21 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
   pi.registerCommand("codexswap", {
     description: "Manage/switch multiple OpenAI Codex OAuth accounts",
     handler: async (args, ctx) => {
+      const raw = (args ?? "").trim();
+      const parts = raw.length ? raw.split(/\s+/) : [];
+      const sub = (parts[0] ?? "").toLowerCase();
+      const rest = raw.length ? raw.slice(parts[0]?.length ?? 0).trim() : "";
+
+      if (sub === "help" || sub === "--help" || sub === "-h" || sub === "?") {
+        ctx.ui.notify(helpText(), "info");
+        return;
+      }
+
       const live = getOpenAICodexFromAuth();
       if (!live) {
         ctx.ui.notify("No openai-codex OAuth found in auth.json.", "error");
         return;
       }
-
-      const raw = (args ?? "").trim();
-      const parts = raw.length ? raw.split(/\s+/) : [];
-      const sub = (parts[0] ?? "").toLowerCase();
-      const rest = raw.length ? raw.slice(parts[0]?.length ?? 0).trim() : "";
 
       const store = ensureBootstrapped(loadStore());
       const liveProfile = findByRefresh(store.profiles, live.refresh);
@@ -596,11 +606,22 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
           const usageText = profileUsage
             ? profileUsage.error
               ? profileUsage.error
-              : profileUsage.windows.map((w) => `${w.label} ${w.usedPercent}%`).join(" | ") || "no data"
+              : profileUsage.windows.map((w) => `${w.label} ${w.usedPercent}% (resets ${formatResetClock(w.resetAt) || "?"})`).join(" | ") || "no data"
             : "usage unknown";
           return `${active} ${i + 1}. ${p.label} - ${shortWho(p)} - ${usageText} ${liveMark}`.trim();
         });
         saveStore(store);
+
+        const tokenExpiryLine = (() => {
+          const exp = (activeOauth ?? live)?.expires;
+          if (typeof exp !== "number" || !Number.isFinite(exp)) return "";
+          const expSeconds = exp >= 1e12 ? Math.floor(exp / 1000) : Math.floor(exp);
+          const when = formatResetClock(expSeconds);
+          const remaining = formatRemaining(expSeconds).trim();
+          if (!when) return "";
+          return `Access token expires: ${when}${remaining ? " " + remaining : ""}`;
+        })();
+
         ctx.ui.notify(
           [
             `Profiles: ${store.profiles.length}`,
@@ -610,6 +631,7 @@ export default function codexSwapExtension(pi: ExtensionAPI) {
             lines.length ? lines.join("\n") : "(none)",
             "",
             usageSummary(usage),
+            ...(tokenExpiryLine ? ["", tokenExpiryLine] : []),
           ].join("\n"),
           "info"
         );
